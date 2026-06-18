@@ -55,8 +55,10 @@ class IngestService:
             await self._session.commit()
         except Exception as exc:
             await self._fail_sync_run(run_id, str(exc))
+            # Log but do not re-raise: the error is stored in the SyncRun record (status="failed")
+            # and the client polls GET /sync/{id} to see it. Re-raising here causes Starlette to
+            # emit a full ASGI exception traceback even though the error is already handled.
             logger.error("background sync failed", repo=repo, error=str(exc))
-            raise
 
     async def sync(self, repo: str, since: date, until: date) -> SyncRun:
         owner, name = repo.split("/", 1)

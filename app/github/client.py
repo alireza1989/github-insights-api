@@ -70,18 +70,21 @@ class GitHubClient:
 
     async def _graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         assert self._client is not None, "Use as async context manager"
-        response = await self._client.post(
-            self._graphql_url,
-            json={"query": query, "variables": variables},
-        )
+        payload = {"query": query, "variables": variables}
+        response = await self._client.post(self._graphql_url, json=payload)
+
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", "60"))
             logger.warning("rate limited", retry_after=retry_after)
             await asyncio.sleep(retry_after)
-            response = await self._client.post(
-                self._graphql_url,
-                json={"query": query, "variables": variables},
-            )
+            response = await self._client.post(self._graphql_url, json=payload)
+
+        # Retry once on transient 5xx errors (GitHub occasionally returns 502/503)
+        if response.status_code >= 500:
+            logger.warning("github 5xx, retrying once", status=response.status_code)
+            await asyncio.sleep(5)
+            response = await self._client.post(self._graphql_url, json=payload)
+
         response.raise_for_status()
         body: dict[str, Any] = response.json()
         if "errors" in body:
