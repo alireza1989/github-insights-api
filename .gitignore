@@ -1,0 +1,54 @@
+# Environment & secrets
+.env
+*.env
+
+# Planning and working files (not for public repo)
+PLAN.md
+PLAN*.md
+NOTES.md
+TODO*.md
+WORKING*.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.lcov
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# uv
+.python-version
+
+# macOS
+.DS_Store
