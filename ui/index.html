@@ -431,19 +431,45 @@
           body: JSON.stringify({ repo, since, until }),
         });
         const data = await res.json();
-        if (!res.ok || data.status === 'failed') {
-          const msg = data.error || data.detail || JSON.stringify(data);
+        if (!res.ok) {
+          const msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
           setStep('sync', 'error', msg.slice(0, 80));
           showPipelineError('Sync failed: ' + msg);
           return false;
         }
-        setStep('sync', 'done', `${data.rows_ingested.toLocaleString()} rows ingested`);
-        return true;
+        // Server accepted the job; poll until it completes
+        return await pollSync(data.id);
       } catch (e) {
         setStep('sync', 'error', e.message);
         showPipelineError('Sync error: ' + e.message);
         return false;
       }
+    }
+
+    async function pollSync(runId) {
+      const maxAttempts = 120; // 4-minute ceiling (120 × 2 s)
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const res = await fetch(`/sync/${runId}`);
+          const data = await res.json();
+          if (data.status === 'success') {
+            setStep('sync', 'done', `${data.rows_ingested.toLocaleString()} rows ingested`);
+            return true;
+          }
+          if (data.status === 'failed') {
+            const msg = data.error || 'Sync failed';
+            setStep('sync', 'error', msg.slice(0, 80));
+            showPipelineError('Sync failed: ' + msg);
+            return false;
+          }
+          // Still running — show elapsed time so the user knows something is happening
+          setStep('sync', 'running', `Fetching from GitHub… (${(i + 1) * 2}s)`);
+        } catch { /* transient network hiccup — keep polling */ }
+      }
+      setStep('sync', 'error', 'Timed out after 4 minutes');
+      showPipelineError('Sync did not complete within 4 minutes. Try a shorter date range.');
+      return false;
     }
 
     async function loadReviewLoad(repo, since, until) {

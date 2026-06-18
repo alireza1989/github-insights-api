@@ -27,13 +27,13 @@ from app.schemas.insights import (
     InsightToolInput,
     ModelInfo,
 )
-from app.schemas.metrics import ReviewLoadResponse
+from app.schemas.metrics import CycleTimeResponse, ReviewLoadResponse
 
 logger = get_logger(__name__)
 
 _CACHE_TTL_HOURS = 24
 _PROMPT_NAME = "insights"
-_PROMPT_VERSION = 1
+_PROMPT_VERSION = 2
 
 
 def _cache_key(repo: str, from_date: str, to_date: str, metric: str, model: str) -> str:
@@ -66,6 +66,7 @@ async def generate_insight(
     session: AsyncSession,
     settings: Settings,
     metric: str = "review-load",
+    cycle_time: CycleTimeResponse | None = None,
 ) -> InsightResponse:
     repo = metrics.repo
     from_date = metrics.period.from_date
@@ -102,8 +103,12 @@ async def generate_insight(
     # Render prompts
     sys_prompt = get_prompt(_PROMPT_NAME, "system", _PROMPT_VERSION).text
     user_tmpl = get_prompt(_PROMPT_NAME, "user", _PROMPT_VERSION)
+    cycle_time_json = (
+        json.dumps(cycle_time.model_dump(), indent=2) if cycle_time else "not available"
+    )
     user_prompt = user_tmpl.render(
         metrics_json=json.dumps(metrics_dict, indent=2),
+        cycle_time_json=cycle_time_json,
         confidence_score=conf_score,
         confidence_rationale=conf_rationale,
     )
@@ -164,6 +169,9 @@ async def generate_insight(
     return response
 
 
+
+
+
 async def _load_cache(session: AsyncSession, cache_key: str) -> InsightCache | None:
     cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=_CACHE_TTL_HOURS)
     result = await session.execute(
@@ -185,6 +193,8 @@ async def _store_cache(
     response: InsightResponse,
     settings: Settings,
 ) -> None:
+    response_json = response.model_dump_json()
+    now = datetime.now(tz=timezone.utc)
     stmt = (
         sqlite_insert(InsightCache)
         .values(
@@ -193,17 +203,14 @@ async def _store_cache(
             from_date=from_date,
             to_date=to_date,
             metric=metric,
-            response_json=response.model_dump_json(),
-            created_at=datetime.now(tz=timezone.utc),
+            response_json=response_json,
+            created_at=now,
             model_name=settings.llm_model,
             prompt_version=f"insights_v{_PROMPT_VERSION}",
         )
         .on_conflict_do_update(
             index_elements=["cache_key"],
-            set_={
-                "response_json": response.model_dump_json(),
-                "created_at": datetime.now(tz=timezone.utc),
-            },
+            set_={"response_json": response_json, "created_at": now},
         )
     )
     await session.execute(stmt)

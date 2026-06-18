@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import statistics
+import math
 from collections import defaultdict
 from typing import Optional
 
@@ -17,7 +17,10 @@ def _percentile(values: list[float], pct: float) -> Optional[float]:
     if not values:
         return None
     sorted_vals = sorted(values)
-    idx = max(0, int(len(sorted_vals) * pct / 100) - 1)
+    n = len(sorted_vals)
+    # Nearest-rank method with ceil: ceil avoids truncation error that makes p90 return p80
+    # on small lists (e.g. int(2 * 0.9) - 1 = 0 instead of the correct 1).
+    idx = min(n - 1, max(0, math.ceil(pct / 100 * n) - 1))
     return round(sorted_vals[idx], 2)
 
 
@@ -37,7 +40,6 @@ def compute_cycle_time(
     merged = [pr for pr in prs if pr.merged_at is not None]
 
     ttfr_hours: list[float] = []
-    tta_hours: list[float] = []
     ttm_hours: list[float] = []
     by_author: dict[str, dict[str, list[float]]] = defaultdict(lambda: {"ttfr": [], "ttm": []})
 
@@ -53,9 +55,9 @@ def compute_cycle_time(
             ttm_hours.append(h_ttm)
             by_author[pr.author]["ttm"].append(h_ttm)
 
-    # time-to-approval approximated as first review that is an APPROVAL
-    # (we don't have review state here, so we use first_review_at as proxy)
-    tta_hours = ttfr_hours  # close enough without joining reviews
+    # time-to-approval: approximated by time-to-first-review since we track
+    # first_review_at on the PR but don't store the approval state separately.
+    tta_hours = ttfr_hours
 
     def stat(hours: list[float]) -> CycleTimeStat:
         return CycleTimeStat(p50_hours=_percentile(hours, 50), p90_hours=_percentile(hours, 90))

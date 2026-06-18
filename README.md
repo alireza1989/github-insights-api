@@ -67,7 +67,7 @@ Open `http://localhost:8000/docs` for the interactive OpenAPI explorer.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_TOKEN` | ✅ | — | GitHub PAT with `public_repo` scope |
+| `GITHUB_TOKEN` | ✅ | — | Any valid GitHub PAT (no extra scopes needed for public repos) |
 | `ANTHROPIC_API_KEY` | ✅ | — | Anthropic API key |
 | `LLM_MODEL` | | `claude-sonnet-4-6` | Claude model ID |
 | `LLM_MAX_TOKENS` | | `8000` | Max output tokens per insight call |
@@ -78,7 +78,7 @@ Open `http://localhost:8000/docs` for the interactive OpenAPI explorer.
 | `LOG_LEVEL` | | `INFO` | Log level |
 | `LOG_JSON` | | `false` | Emit JSON logs (set `true` in production) |
 
-The GitHub PAT only needs **`public_repo` (read-only)** scope. It is never logged.
+GitHub's GraphQL API requires authentication even for public repositories — a token with **no extra scopes** is sufficient for read-only access to public repos. The token is never logged.
 
 ## API reference
 

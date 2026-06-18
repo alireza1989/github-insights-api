@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 import httpx
 
-from app.github.queries import COMMITS_ON_DEFAULT_BRANCH, PR_WITH_REVIEWS
+from app.github.queries import COMMITS_ON_DEFAULT_BRANCH, DEFAULT_BRANCH_QUERY, PR_WITH_REVIEWS
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -121,6 +121,12 @@ class GitHubClient:
                 author = author_node["login"] if author_node else "ghost"
 
                 reviews = []
+                if node["reviews"]["pageInfo"]["hasNextPage"]:
+                    logger.warning(
+                        "review page truncated at 100; some reviews will be missing",
+                        repo=f"{owner}/{name}",
+                        pr=node["number"],
+                    )
                 for rv in node["reviews"]["nodes"]:
                     rv_author = rv.get("author")
                     if not rv_author or not rv.get("submittedAt"):
@@ -206,10 +212,8 @@ class GitHubClient:
         return commits
 
     async def get_default_branch(self, owner: str, name: str) -> str:
-        data = await self._graphql(
-            PR_WITH_REVIEWS,
-            {"owner": owner, "name": name, "after": None},
-        )
+        # Dedicated lightweight query — avoids fetching 100 PRs just to read one field.
+        data = await self._graphql(DEFAULT_BRANCH_QUERY, {"owner": owner, "name": name})
         ref = data["repository"].get("defaultBranchRef")
         return ref["name"] if ref else "main"
 

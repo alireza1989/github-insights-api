@@ -1,3 +1,13 @@
+DEFAULT_BRANCH_QUERY = """
+query DefaultBranch($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      name
+    }
+  }
+}
+"""
+
 PR_WITH_REVIEWS = """
 query PullRequestsWithReviews(
   $owner: String!
@@ -30,6 +40,9 @@ query PullRequestsWithReviews(
           login
         }
         reviews(first: 100) {
+          pageInfo {
+            hasNextPage
+          }
           nodes {
             databaseId
             state

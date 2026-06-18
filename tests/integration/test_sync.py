@@ -1,6 +1,5 @@
 """Integration tests for the sync endpoint using mocked GitHub API."""
 
-import json
 import pytest
 import respx
 import httpx
@@ -9,6 +8,16 @@ from httpx import AsyncClient
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
+# Minimal response for DEFAULT_BRANCH_QUERY (only needs defaultBranchRef)
+DEFAULT_BRANCH_RESPONSE = {
+    "data": {
+        "repository": {
+            "defaultBranchRef": {"name": "main"},
+        }
+    }
+}
+
+# Full PR response for PR_WITH_REVIEWS — includes reviews.pageInfo since we added it
 PR_RESPONSE = {
     "data": {
         "repository": {
@@ -26,6 +35,7 @@ PR_RESPONSE = {
                         "deletions": 8,
                         "author": {"login": "alice"},
                         "reviews": {
+                            "pageInfo": {"hasNextPage": False},
                             "nodes": [
                                 {
                                     "databaseId": 101,
@@ -33,7 +43,7 @@ PR_RESPONSE = {
                                     "submittedAt": "2024-03-16T09:00:00Z",
                                     "author": {"login": "bob"},
                                 }
-                            ]
+                            ],
                         },
                     }
                 ],
@@ -71,11 +81,10 @@ COMMIT_RESPONSE = {
 @pytest.mark.asyncio
 async def test_sync_success(async_client: AsyncClient) -> None:
     with respx.mock(base_url=GITHUB_GRAPHQL_URL) as mock:
-        # First call fetches default branch + PRs, subsequent calls get commits
         mock.post("").side_effect = [
-            httpx.Response(200, json=PR_RESPONSE),   # get_default_branch
-            httpx.Response(200, json=PR_RESPONSE),   # fetch_pull_requests
-            httpx.Response(200, json=COMMIT_RESPONSE),  # fetch_commits
+            httpx.Response(200, json=DEFAULT_BRANCH_RESPONSE),  # get_default_branch
+            httpx.Response(200, json=PR_RESPONSE),              # fetch_pull_requests
+            httpx.Response(200, json=COMMIT_RESPONSE),          # fetch_commits
         ]
 
         resp = await async_client.post(
@@ -83,10 +92,18 @@ async def test_sync_success(async_client: AsyncClient) -> None:
             json={"repo": "owner/testrepo", "since": "2024-01-01", "until": "2024-12-31"},
         )
 
-    assert resp.status_code == 200
+    # POST /sync returns 202 immediately; background task runs after response is sent
+    assert resp.status_code == 202
     body = resp.json()
-    assert body["status"] == "success"
-    assert body["rows_ingested"] > 0
+    run_id = body["id"]
+    assert body["status"] == "running"
+
+    # Poll the status endpoint to confirm the background task completed successfully
+    status_resp = await async_client.get(f"/sync/{run_id}")
+    assert status_resp.status_code == 200
+    status_body = status_resp.json()
+    assert status_body["status"] == "success"
+    assert status_body["rows_ingested"] > 0
 
 
 @pytest.mark.asyncio

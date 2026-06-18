@@ -23,6 +23,39 @@ class IngestService:
         self._session = session
         self._settings = settings
 
+    async def start_run(self, repo: str) -> SyncRun:
+        """Create the repo and SyncRun records, commit, and return the run.
+
+        Call this before returning a 202 response so the caller has a run id to poll.
+        The actual ingest should then run in a background task via execute_run().
+        """
+        owner, name = repo.split("/", 1)
+        repo_row = await self._get_or_create_repo(owner, name)
+        sync_run = await self._create_sync_run(repo_row.id)
+        await self._session.commit()
+        return sync_run
+
+    async def execute_run(self, run_id: int, repo: str, since: date, until: date) -> None:
+        """Run the ingest for an already-created SyncRun (used from background tasks)."""
+        owner, name = repo.split("/", 1)
+        since_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)
+        until_dt = datetime(until.year, until.month, until.day, 23, 59, 59, tzinfo=timezone.utc)
+
+        result = await self._session.execute(
+            select(Repository).where(Repository.owner == owner, Repository.name == name)
+        )
+        repo_row = result.scalar_one()
+
+        try:
+            rows = await self._run_ingest(owner, name, repo_row, since_dt, until_dt)
+            await self._finish_sync_run(run_id, rows)
+            # _run_ingest already commits the data rows; commit the SyncRun status update too.
+            await self._session.commit()
+        except Exception as exc:
+            await self._fail_sync_run(run_id, str(exc))
+            logger.error("background sync failed", repo=repo, error=str(exc))
+            raise
+
     async def sync(self, repo: str, since: date, until: date) -> SyncRun:
         owner, name = repo.split("/", 1)
         since_dt = datetime(since.year, since.month, since.day, tzinfo=timezone.utc)

@@ -10,17 +10,27 @@ from app.config import Settings
 from app.deps import get_app_settings, get_session
 from app.github.utils import normalize_repo
 from app.insights.service import generate_insight
-from app.routers.metrics import _get_repo, review_load
+from app.routers.metrics import _get_repo, cycle_time, review_load
 from app.schemas.insights import InsightResponse
 
 router = APIRouter(tags=["insights"])
 
 # Simple in-memory per-IP token bucket (rate limits the costly LLM endpoint)
 _buckets: dict[str, list[float]] = defaultdict(list)
+_last_eviction: float = 0.0
 
 
 def _check_rate_limit(ip: str, limit_per_minute: int) -> None:
+    global _last_eviction
     now = time.time()
+
+    # Sweep IPs whose entire window has expired every 5 minutes to prevent unbounded growth.
+    if now - _last_eviction > 300:
+        stale = [k for k, v in list(_buckets.items()) if not any(now - t < 60 for t in v)]
+        for k in stale:
+            del _buckets[k]
+        _last_eviction = now
+
     window = [t for t in _buckets[ip] if now - t < 60]
     if len(window) >= limit_per_minute:
         raise HTTPException(
@@ -52,7 +62,7 @@ async def get_insight(
     _check_rate_limit(client_ip, settings.rate_limit_per_minute)
     repo = normalize_repo(repo)
 
-    # Reuse the metrics endpoint to get the underlying data
+    # Fetch review-load (required) and cycle-time (best-effort: may have no merged PRs)
     metrics = await review_load(
         repo=repo,
         from_date=from_date,
@@ -61,4 +71,9 @@ async def get_insight(
         session=session,
     )
 
-    return await generate_insight(metrics, session, settings, metric=metric)
+    try:
+        ct_metrics = await cycle_time(repo=repo, from_date=from_date, to_date=to_date, session=session)
+    except HTTPException:
+        ct_metrics = None
+
+    return await generate_insight(metrics, session, settings, metric=metric, cycle_time=ct_metrics)

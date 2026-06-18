@@ -29,7 +29,7 @@ class SyncResponse(BaseModel):
     id: int
     repo: str
     status: str
-    rows_ingested: int
+    rows_ingested: int = 0
     started_at: datetime
-    finished_at: Optional[datetime]
-    error: Optional[str]
+    finished_at: Optional[datetime] = None
+    error: Optional[str] = None
