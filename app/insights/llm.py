@@ -62,10 +62,8 @@ async def call_llm(
     if retry_context:
         user_content += f"\n\n<grounding_failure>\n{retry_context}\n</grounding_failure>"
 
-    # Use tool_choice "any" instead of forcing the specific tool name: the API disallows
-    # extended thinking when tool_choice={"type":"tool"} (forced named tool), but "any"
-    # still requires the model to call a tool. Since we only register emit_insight, it
-    # will always be called — behaviour is identical but thinking is now compatible.
+    # tool_choice "any" forces the model to call a tool without naming a specific one.
+    # Since emit_insight is the only registered tool it is always selected.
     call_kwargs: dict[str, Any] = {
         "model": settings.llm_model,
         "max_tokens": settings.llm_max_tokens,
@@ -76,11 +74,11 @@ async def call_llm(
     }
 
     if settings.llm_enable_thinking:
-        # budget_tokens must be strictly less than max_tokens or the API returns a validation error.
-        call_kwargs["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": settings.llm_thinking_budget,
-        }
+        # Claude 4.x (sonnet-4-6 and newer) uses {"type": "adaptive"} for thinking.
+        # The legacy {"type": "enabled", "budget_tokens": N} format was Claude 3.7 Sonnet
+        # only and returns a 400 on 4.x models.  Adaptive thinking is fully compatible
+        # with all tool_choice modes including "any".
+        call_kwargs["thinking"] = {"type": "adaptive"}
 
     t0 = time.monotonic()
     response = await client.messages.create(**call_kwargs)

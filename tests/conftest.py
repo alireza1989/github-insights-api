@@ -40,6 +40,9 @@ async def db_session(test_settings: Settings) -> AsyncGenerator[AsyncSession, No
 @pytest_asyncio.fixture
 async def async_client(test_settings: Settings) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
+    # Inject test settings into app.state BEFORE the lifespan starts so it picks
+    # up the in-memory database URL instead of the real on-disk DB from get_settings().
+    app.state.settings = test_settings
     app.dependency_overrides[get_settings] = lambda: test_settings
     app.dependency_overrides[get_app_settings] = lambda: test_settings
 

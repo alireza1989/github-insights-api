@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import build_engine, build_session_factory, create_tables
 from app.logging_config import configure_logging, get_logger
 from app.routers import health
@@ -17,7 +17,9 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    settings = get_settings()
+    # Tests inject settings via app.state.settings before the lifespan starts so
+    # they get an isolated in-memory DB.  In production app.state has no settings yet.
+    settings: Settings = getattr(app.state, "settings", None) or get_settings()
     configure_logging(settings.log_level, settings.log_json)
 
     engine = build_engine(settings.database_url, echo=settings.debug)

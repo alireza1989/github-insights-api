@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     llm_model: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 8000
-    llm_thinking_budget: int = 4000
     llm_enable_thinking: bool = True
 
     # Database
