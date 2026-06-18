@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.github.client import CommitData, GitHubClient, PRData
+from app.ingest.coverage import compute_gaps
 from app.logging_config import get_logger
 from app.models.commit import Commit
 from app.models.pull_request import PullRequest
 from app.models.repository import Repository
 from app.models.review import Review
 from app.models.sync_run import SyncRun
+from app.models.synced_range import SyncedRange
 
 logger = get_logger(__name__)
 
@@ -92,7 +94,33 @@ class IngestService:
         since_dt: datetime,
         until_dt: datetime,
     ) -> int:
-        rows = 0
+        since = since_dt.date()
+        until = until_dt.date()
+
+        # Check what date ranges we have already stored for this repo so we only
+        # call GitHub for the portions that are genuinely missing.
+        result = await self._session.execute(
+            select(SyncedRange).where(SyncedRange.repo_id == repo_row.id)
+        )
+        covered = [(r.from_date, r.to_date) for r in result.scalars().all()]
+        gaps = compute_gaps(since, until, covered)
+
+        if not gaps:
+            logger.info(
+                "requested range fully covered by existing data, skipping github fetch",
+                repo=f"{owner}/{name}",
+                since=str(since),
+                until=str(until),
+            )
+            return 0
+
+        logger.info(
+            "fetching gaps from github",
+            repo=f"{owner}/{name}",
+            gaps=[(str(s), str(u)) for s, u in gaps],
+        )
+
+        total_rows = 0
         async with GitHubClient(self._settings.github_token, self._settings.github_graphql_url) as gh:
             default_branch = await gh.get_default_branch(owner, name)
             if repo_row.default_branch != default_branch:
@@ -102,15 +130,22 @@ class IngestService:
                     .values(default_branch=default_branch)
                 )
 
-            prs = await gh.fetch_pull_requests(owner, name, since_dt, until_dt)
-            logger.info("prs fetched", repo=f"{owner}/{name}", count=len(prs))
-            rows += await self._upsert_prs(repo_row.id, prs)  # type: ignore[arg-type]
+            for gap_since, gap_until in gaps:
+                gap_since_dt = datetime(gap_since.year, gap_since.month, gap_since.day, tzinfo=timezone.utc)
+                gap_until_dt = datetime(gap_until.year, gap_until.month, gap_until.day, 23, 59, 59, tzinfo=timezone.utc)
 
-            commits = await gh.fetch_commits(
-                owner, name, default_branch, since_dt, until_dt
-            )
-            logger.info("commits fetched", repo=f"{owner}/{name}", count=len(commits))
-            rows += await self._upsert_commits(repo_row.id, commits)  # type: ignore[arg-type]
+                prs = await gh.fetch_pull_requests(owner, name, gap_since_dt, gap_until_dt)
+                logger.info("prs fetched", repo=f"{owner}/{name}", gap_since=str(gap_since), count=len(prs))
+                rows = await self._upsert_prs(repo_row.id, prs)  # type: ignore[arg-type]
+
+                commits = await gh.fetch_commits(owner, name, default_branch, gap_since_dt, gap_until_dt)
+                logger.info("commits fetched", repo=f"{owner}/{name}", gap_since=str(gap_since), count=len(commits))
+                rows += await self._upsert_commits(repo_row.id, commits)  # type: ignore[arg-type]
+
+                # Record coverage so future syncs overlapping this range skip GitHub entirely.
+                self._session.add(SyncedRange(repo_id=repo_row.id, from_date=gap_since, to_date=gap_until))  # type: ignore[arg-type]
+                await self._session.commit()
+                total_rows += rows
 
         await self._session.execute(
             update(Repository)
@@ -118,7 +153,7 @@ class IngestService:
             .values(last_synced_at=datetime.now(tz=timezone.utc))
         )
         await self._session.commit()
-        return rows
+        return total_rows
 
     async def _get_or_create_repo(self, owner: str, name: str) -> Repository:
         result = await self._session.execute(

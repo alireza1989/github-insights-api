@@ -71,25 +71,62 @@ class GitHubClient:
     async def _graphql(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         assert self._client is not None, "Use as async context manager"
         payload = {"query": query, "variables": variables}
-        response = await self._client.post(self._graphql_url, json=payload)
 
-        if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", "60"))
-            logger.warning("rate limited", retry_after=retry_after)
-            await asyncio.sleep(retry_after)
-            response = await self._client.post(self._graphql_url, json=payload)
+        for attempt in range(3):
+            try:
+                response = await self._client.post(self._graphql_url, json=payload)
+            except (httpx.RemoteProtocolError, httpx.ReadError) as exc:
+                # GitHub occasionally closes the TCP connection mid-response (chunked
+                # transfer encoding body drop).  Retry up to 2 times with backoff.
+                if attempt < 2:
+                    logger.warning(
+                        "connection dropped mid-response, retrying",
+                        attempt=attempt,
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+                raise GitHubError(f"Connection error after retries: {exc}") from exc
 
-        # Retry once on transient 5xx errors (GitHub occasionally returns 502/503)
-        if response.status_code >= 500:
-            logger.warning("github 5xx, retrying once", status=response.status_code)
-            await asyncio.sleep(5)
-            response = await self._client.post(self._graphql_url, json=payload)
+            # Primary rate limit (hourly quota exhausted)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", "60"))
+                logger.warning("primary rate limited", retry_after=retry_after)
+                await asyncio.sleep(retry_after)
+                continue
 
-        response.raise_for_status()
-        body: dict[str, Any] = response.json()
-        if "errors" in body:
-            raise GitHubError(f"GraphQL errors: {body['errors']}")
-        return body["data"]
+            # Secondary rate limit (too many requests per minute / concurrent)
+            if response.status_code == 403 and (
+                "retry-after" in response.headers or "x-ratelimit-retry-after" in response.headers
+            ):
+                retry_after = int(
+                    response.headers.get("retry-after")
+                    or response.headers.get("x-ratelimit-retry-after", "60")
+                )
+                logger.warning("secondary rate limited", retry_after=retry_after)
+                await asyncio.sleep(retry_after)
+                continue
+
+            if response.status_code >= 500:
+                if attempt < 2:
+                    logger.warning("github 5xx, retrying", status=response.status_code, attempt=attempt)
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+                response.raise_for_status()
+
+            response.raise_for_status()
+            body: dict[str, Any] = response.json()
+            if "errors" in body:
+                raise GitHubError(f"GraphQL errors: {body['errors']}")
+
+            data: dict[str, Any] = body["data"]
+            delay = _rate_limit_delay(data)
+            if delay > 0:
+                logger.warning("rate limit throttling", sleep_secs=round(delay))
+                await asyncio.sleep(delay)
+            return data
+
+        raise GitHubError("GitHub API retries exhausted")
 
     async def fetch_pull_requests(
         self,
@@ -219,6 +256,25 @@ class GitHubClient:
         data = await self._graphql(DEFAULT_BRANCH_QUERY, {"owner": owner, "name": name})
         ref = data["repository"].get("defaultBranchRef")
         return ref["name"] if ref else "main"
+
+
+def _rate_limit_delay(data: dict[str, Any]) -> float:
+    """Return seconds to sleep based on remaining quota. 0 means no throttle needed."""
+    rate = data.get("rateLimit") if data else None
+    if not rate:
+        return 0.0
+    remaining = rate.get("remaining", 5000)
+    if remaining < 100:
+        # Near hourly exhaustion — sleep until the quota resets.
+        reset_at_str = rate.get("resetAt")
+        if reset_at_str:
+            reset_dt = datetime.fromisoformat(reset_at_str.replace("Z", "+00:00"))
+            return max(5.0, (reset_dt - datetime.now(timezone.utc)).total_seconds() + 2)
+        return 60.0
+    if remaining < 500:
+        # Getting low — add a courtesy delay between pages.
+        return 2.0
+    return 0.0
 
 
 def _parse_dt(value: str) -> datetime:
