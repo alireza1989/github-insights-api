@@ -62,22 +62,21 @@ async def call_llm(
     if retry_context:
         user_content += f"\n\n<grounding_failure>\n{retry_context}\n</grounding_failure>"
 
-    # tool_choice "any" forces the model to call a tool without naming a specific one.
-    # Since emit_insight is the only registered tool it is always selected.
+    # When thinking is enabled we must use tool_choice "auto": the API blocks thinking
+    # whenever tool_choice forces tool use ("any" or named "tool").  With only
+    # emit_insight registered the model always calls it under "auto" anyway.
+    # When thinking is disabled we switch to "any" to guarantee a tool call.
+    forced_tool_use = not settings.llm_enable_thinking
     call_kwargs: dict[str, Any] = {
         "model": settings.llm_model,
         "max_tokens": settings.llm_max_tokens,
         "tools": [tool],
-        "tool_choice": {"type": "any"},
+        "tool_choice": {"type": "any" if forced_tool_use else "auto"},
         "system": system_content,
         "messages": [{"role": "user", "content": user_content}],
     }
 
     if settings.llm_enable_thinking:
-        # Claude 4.x (sonnet-4-6 and newer) uses {"type": "adaptive"} for thinking.
-        # The legacy {"type": "enabled", "budget_tokens": N} format was Claude 3.7 Sonnet
-        # only and returns a 400 on 4.x models.  Adaptive thinking is fully compatible
-        # with all tool_choice modes including "any".
         call_kwargs["thinking"] = {"type": "adaptive"}
 
     t0 = time.monotonic()
