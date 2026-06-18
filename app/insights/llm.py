@@ -50,6 +50,8 @@ async def call_llm(
 
     tool = _build_tool(InsightToolInput.model_json_schema())
 
+    # Prompt caching requires system to be a list of typed content blocks, not a plain string;
+    # cache_control on the block tells the API to cache this text across repeated calls.
     system_content: list[dict[str, Any]] = [
         {
             "type": "text",
@@ -72,6 +74,7 @@ async def call_llm(
     }
 
     if settings.llm_enable_thinking:
+        # budget_tokens must be strictly less than max_tokens or the API returns a validation error.
         call_kwargs["thinking"] = {
             "type": "enabled",
             "budget_tokens": settings.llm_thinking_budget,

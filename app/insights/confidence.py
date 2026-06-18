@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 
+# sample_size carries the highest weight — small n is the most common cause of spurious signals.
 _WEIGHTS = {
     "sample_size": 0.35,
     "effect_size": 0.30,

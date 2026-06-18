@@ -37,6 +37,7 @@ _PROMPT_VERSION = 1
 
 
 def _cache_key(repo: str, from_date: str, to_date: str, metric: str, model: str) -> str:
+    # Prompt version is part of the key so cached entries auto-invalidate when prompts change.
     raw = f"{repo}|{from_date}|{to_date}|{metric}|{model}|v{_PROMPT_VERSION}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 

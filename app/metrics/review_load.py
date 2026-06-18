@@ -16,6 +16,7 @@ def compute_gini(values: list[float]) -> float:
         return 0.0
     n = len(values)
     sorted_vals = sorted(values)
+    # Closed-form Gini: rank-weighted cumulative sum avoids O(n²) pairwise comparisons.
     cumsum = sum((i + 1) * v for i, v in enumerate(sorted_vals))
     return (2 * cumsum / (n * sum(sorted_vals))) - (n + 1) / n
 

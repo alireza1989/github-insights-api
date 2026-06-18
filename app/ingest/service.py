@@ -155,9 +155,10 @@ class IngestService:
                 )
             )
             result = await self._session.execute(stmt)
+            # ON CONFLICT DO UPDATE doesn't return the row id; flush first to make the upserted
+            # row visible within this transaction, then re-select to get the id for reviews.
             await self._session.flush()
 
-            # Get the PR id for review upserts
             pr_result = await self._session.execute(
                 select(PullRequest).where(
                     PullRequest.repo_id == repo_id, PullRequest.number == pr.number

@@ -7,6 +7,8 @@ from sqlmodel import SQLModel
 def build_engine(database_url: str, echo: bool = False) -> AsyncEngine:
     connect_args = {}
     if database_url.startswith("sqlite"):
+        # asyncio multiplexes coroutines across OS threads; SQLite's default same-thread
+        # check would reject connections reused across coroutines, so disable it here.
         connect_args["check_same_thread"] = False
     return create_async_engine(database_url, echo=echo, connect_args=connect_args)
 

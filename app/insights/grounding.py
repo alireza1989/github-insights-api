@@ -36,6 +36,7 @@ def _normalize_number(token: str) -> list[str]:
         f = float(clean)
         # Also match percentage as decimal (31% → 0.31)
         if token.endswith("%"):
+            # The LLM writes "31%" but the metrics payload stores 0.31; match both forms.
             variants.append(str(round(f / 100, 2)))
             variants.append(str(round(f / 100, 4)))
         # Round-tripped int

@@ -110,7 +110,9 @@ class GitHubClient:
             for node in page["nodes"]:
                 created_at = _parse_dt(node["createdAt"])
                 if created_at < since:
-                    return prs  # past the requested window; stop pagination
+                    # GitHub returns PRs in DESC created_at order, so once we see one
+                    # older than `since` every subsequent page will be older too.
+                    return prs
 
                 if created_at > until:
                     continue  # too recent; skip but keep paginating
