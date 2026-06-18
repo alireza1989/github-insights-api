@@ -8,230 +8,269 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <style>
     body { font-family: 'Inter', system-ui, sans-serif; }
-    .card { @apply bg-gray-900 border border-gray-800 rounded-xl p-6; }
-    .btn-primary {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    }
-    .btn-primary:hover { opacity: 0.9; }
-    .evidence-badge {
-      @apply inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-mono
-             bg-indigo-950 border border-indigo-800 text-indigo-300 cursor-pointer;
-    }
-    .evidence-badge:hover { @apply bg-indigo-900; }
     .spinner {
-      border: 2px solid rgba(99,102,241,0.3);
+      border: 2px solid rgba(99,102,241,0.25);
       border-top-color: #6366f1;
       border-radius: 50%;
-      width: 18px; height: 18px;
-      animation: spin 0.6s linear infinite;
+      width: 16px; height: 16px;
+      animation: spin 0.65s linear infinite;
       display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .step-item { transition: all 0.2s ease; }
+    .step-pending  { color: #4b5563; }
+    .step-running  { color: #818cf8; }
+    .step-done     { color: #34d399; }
+    .step-error    { color: #f87171; }
+
+    .evidence-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 6px; font-size: 11px; font-family: monospace;
+      background: #1e1b4b; border: 1px solid #3730a3; color: #a5b4fc; cursor: default;
+    }
+    .evidence-badge:hover { background: #2e2772; }
+
+    .url-input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+
+    .analyze-btn {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      transition: opacity 0.15s;
+    }
+    .analyze-btn:hover:not(:disabled) { opacity: 0.88; }
+    .analyze-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .result-section {
+      opacity: 0; transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      pointer-events: none;
+    }
+    .result-section.visible {
+      opacity: 1; transform: translateY(0);
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body class="min-h-full text-gray-100">
 
   <!-- Header -->
   <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-10">
-    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <svg class="w-7 h-7 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
-        <span class="text-lg font-semibold text-white">GitHub Insights API</span>
+        <span class="font-semibold text-white">GitHub Insights</span>
       </div>
-      <div class="flex gap-4 text-sm">
-        <a href="/docs" target="_blank"
-           class="text-gray-400 hover:text-indigo-400 transition-colors flex items-center gap-1">
-          API Docs
-          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </a>
-        <a href="/health" target="_blank" class="text-gray-400 hover:text-green-400 transition-colors">
-          Health
-        </a>
+      <div class="flex gap-4 text-sm text-gray-500">
+        <a href="/docs" target="_blank" class="hover:text-indigo-400 transition-colors">API docs ↗</a>
+        <a href="/health" target="_blank" class="hover:text-green-400 transition-colors">health</a>
       </div>
     </div>
   </header>
 
-  <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+  <main class="max-w-5xl mx-auto px-6 py-10 space-y-8">
 
-    <!-- Sync Panel -->
-    <section class="card">
-      <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
-        1 — Sync Repository
-      </h2>
+    <!-- ── Analyze panel ─────────────────────────────────────────── -->
+    <section class="bg-gray-900 border border-gray-800 rounded-2xl p-8 space-y-5">
+      <div>
+        <h1 class="text-xl font-semibold text-white mb-1">Analyze a GitHub repository</h1>
+        <p class="text-sm text-gray-500">
+          Paste any public GitHub URL. The service fetches collaboration data, computes
+          reviewer-load and cycle-time metrics, then generates an AI-powered insight.
+        </p>
+      </div>
+
+      <!-- URL input -->
+      <div class="space-y-2">
+        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider">
+          Repository URL or owner/name
+        </label>
+        <input
+          id="repo-input"
+          type="text"
+          placeholder="https://github.com/pallets/flask  or  pallets/flask"
+          class="url-input w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3
+                 text-white placeholder-gray-600 text-sm transition-all"
+          oninput="onRepoInput()"
+          onkeydown="if(event.key==='Enter') analyze()"
+        />
+        <!-- Live parse feedback -->
+        <div id="parse-hint" class="text-xs h-4"></div>
+      </div>
+
+      <!-- Date range + Analyze -->
       <div class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-48">
-          <label class="block text-xs text-gray-500 mb-1">Repository</label>
-          <input id="repo" type="text" placeholder="pallets/flask"
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm
-                   text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500" />
+        <div>
+          <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+            From
+          </label>
+          <input id="since" type="date"
+            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white
+                   focus:outline-none focus:border-indigo-500 transition-colors" />
         </div>
         <div>
-          <label class="block text-xs text-gray-500 mb-1">From</label>
-          <input id="since" type="date" value="2024-01-01"
-            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
-                   focus:outline-none focus:border-indigo-500" />
+          <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+            To
+          </label>
+          <input id="until" type="date"
+            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white
+                   focus:outline-none focus:border-indigo-500 transition-colors" />
         </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1">To</label>
-          <input id="until" type="date" value="2024-06-30"
-            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
-                   focus:outline-none focus:border-indigo-500" />
-        </div>
-        <button id="sync-btn" onclick="runSync()"
-          class="btn-primary text-white text-sm font-medium px-5 py-2 rounded-lg transition-opacity
-                 flex items-center gap-2">
-          <span id="sync-icon">▶</span>
-          <span id="sync-label">Sync</span>
+        <button id="analyze-btn" onclick="analyze()" disabled
+          class="analyze-btn text-white text-sm font-semibold px-8 py-2.5 rounded-lg
+                 flex items-center gap-2 ml-auto">
+          <span id="btn-icon">▶</span>
+          <span id="btn-label">Analyze</span>
         </button>
       </div>
-      <div id="sync-status" class="mt-3 text-sm hidden"></div>
+
+      <!-- Pipeline progress -->
+      <div id="pipeline" class="hidden border-t border-gray-800 pt-4 space-y-2">
+        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Pipeline</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div id="step-sync"  class="step-item step-pending flex items-center gap-2 text-sm">
+            <span id="icon-sync"  class="text-lg leading-none">○</span>
+            <div>
+              <div class="font-medium">Sync repository</div>
+              <div id="detail-sync"  class="text-xs opacity-60">Fetching PRs, reviews, commits</div>
+            </div>
+          </div>
+          <div id="step-metrics" class="step-item step-pending flex items-center gap-2 text-sm">
+            <span id="icon-metrics" class="text-lg leading-none">○</span>
+            <div>
+              <div class="font-medium">Compute metrics</div>
+              <div id="detail-metrics" class="text-xs opacity-60">Review load · Cycle time</div>
+            </div>
+          </div>
+          <div id="step-insight" class="step-item step-pending flex items-center gap-2 text-sm">
+            <span id="icon-insight" class="text-lg leading-none">○</span>
+            <div>
+              <div class="font-medium">Generate insight</div>
+              <div id="detail-insight" class="text-xs opacity-60">LLM analysis (may take ~10 s)</div>
+            </div>
+          </div>
+        </div>
+        <div id="pipeline-error" class="hidden mt-2 text-sm text-red-400 bg-red-950/40
+             border border-red-800/40 rounded-lg px-4 py-2"></div>
+      </div>
     </section>
 
-    <!-- Metrics Row -->
+    <!-- ── Metrics row ────────────────────────────────────────────── -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
       <!-- Review Load -->
-      <section class="card space-y-4">
+      <section id="sec-reviewload"
+        class="result-section bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-            2 — Reviewer Load
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Reviewer Load
           </h2>
-          <button onclick="loadMetrics()"
-            class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-            Refresh
-          </button>
+          <span id="rl-period" class="text-xs text-gray-600"></span>
         </div>
 
-        <div id="rl-loading" class="hidden text-center py-8 text-gray-500 text-sm">
-          <div class="spinner mx-auto mb-2"></div> Loading metrics…
-        </div>
-        <div id="rl-empty" class="text-center py-8 text-gray-600 text-sm">
-          Run a sync then click <em>Refresh</em>
+        <div id="rl-placeholder" class="text-center py-8 text-gray-700 text-sm">
+          Run an analysis to see data
         </div>
         <div id="rl-content" class="hidden space-y-4">
-          <!-- Stats row -->
-          <div class="grid grid-cols-3 gap-3">
-            <div class="bg-gray-800 rounded-lg p-3 text-center">
-              <div id="stat-prs" class="text-2xl font-bold text-white">–</div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="bg-gray-800/60 rounded-lg p-3 text-center">
+              <div id="stat-prs" class="text-xl font-bold text-white">–</div>
               <div class="text-xs text-gray-500 mt-0.5">PRs</div>
             </div>
-            <div class="bg-gray-800 rounded-lg p-3 text-center">
-              <div id="stat-reviews" class="text-2xl font-bold text-white">–</div>
+            <div class="bg-gray-800/60 rounded-lg p-3 text-center">
+              <div id="stat-reviews" class="text-xl font-bold text-white">–</div>
               <div class="text-xs text-gray-500 mt-0.5">Reviews</div>
             </div>
-            <div class="bg-gray-800 rounded-lg p-3 text-center">
-              <div id="stat-gini" class="text-2xl font-bold text-white">–</div>
+            <div class="bg-gray-800/60 rounded-lg p-3 text-center">
+              <div id="stat-gini" class="text-xl font-bold text-indigo-300">–</div>
               <div class="text-xs text-gray-500 mt-0.5">Gini</div>
             </div>
           </div>
-          <!-- Concentration badges -->
-          <div id="concentration-row" class="flex gap-2 text-xs flex-wrap"></div>
-          <!-- Chart -->
-          <div class="relative h-56">
+          <div id="concentration-row" class="flex flex-wrap gap-1.5 text-xs"></div>
+          <div class="relative h-52">
             <canvas id="reviewerChart"></canvas>
           </div>
         </div>
       </section>
 
       <!-- Cycle Time -->
-      <section class="card space-y-4">
+      <section id="sec-cycletime"
+        class="result-section bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-            3 — Cycle Time
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Cycle Time
           </h2>
-          <button onclick="loadCycleTime()"
-            class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-            Refresh
-          </button>
+          <span id="ct-period" class="text-xs text-gray-600"></span>
         </div>
 
-        <div id="ct-loading" class="hidden text-center py-8 text-gray-500 text-sm">
-          <div class="spinner mx-auto mb-2"></div> Loading…
-        </div>
-        <div id="ct-empty" class="text-center py-8 text-gray-600 text-sm">
-          Run a sync then click <em>Refresh</em>
+        <div id="ct-placeholder" class="text-center py-8 text-gray-700 text-sm">
+          Run an analysis to see data
         </div>
         <div id="ct-content" class="hidden space-y-3">
-          <!-- Overall stats -->
-          <div id="ct-overall" class="grid grid-cols-3 gap-3"></div>
-          <!-- Per-author table -->
-          <div class="overflow-auto max-h-52">
+          <div id="ct-overall" class="grid grid-cols-3 gap-2"></div>
+          <div class="overflow-auto max-h-44">
             <table class="w-full text-xs">
               <thead>
                 <tr class="text-gray-500 border-b border-gray-800">
-                  <th class="text-left pb-1 pr-2">Author</th>
-                  <th class="text-right pb-1 pr-2">PRs</th>
-                  <th class="text-right pb-1 pr-2">TTR p50</th>
-                  <th class="text-right pb-1">TTM p50</th>
+                  <th class="text-left pb-1.5 pr-2">Author</th>
+                  <th class="text-right pb-1.5 pr-2">PRs</th>
+                  <th class="text-right pb-1.5 pr-2">TTR p50</th>
+                  <th class="text-right pb-1.5">TTM p50</th>
                 </tr>
               </thead>
-              <tbody id="ct-table" class="divide-y divide-gray-800/50"></tbody>
+              <tbody id="ct-table" class="divide-y divide-gray-800/40"></tbody>
             </table>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- Insight Panel -->
-    <section class="card space-y-5">
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-          4 — LLM Insight
-        </h2>
-        <button onclick="loadInsight()"
-          class="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300
-                 hover:bg-indigo-900 px-3 py-1 rounded-md transition-colors">
-          ✦ Generate / Refresh
-        </button>
-      </div>
+    <!-- ── Insight panel ──────────────────────────────────────────── -->
+    <section id="sec-insight"
+      class="result-section bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
+      <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Insight</h2>
 
-      <div id="ins-loading" class="hidden text-center py-8 text-gray-500 text-sm">
-        <div class="spinner mx-auto mb-3"></div>
-        Calling LLM… (may take a few seconds)
-      </div>
-      <div id="ins-empty" class="text-center py-8 text-gray-600 text-sm">
-        Load metrics first, then click <em>Generate / Refresh</em>
+      <div id="ins-placeholder" class="text-center py-10 text-gray-700 text-sm">
+        Run an analysis to generate an insight
       </div>
       <div id="ins-content" class="hidden space-y-5">
 
         <!-- Narrative -->
-        <div>
-          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Narrative</div>
-          <p id="ins-narrative"
-             class="text-gray-200 leading-relaxed text-sm bg-gray-800/50 rounded-lg p-4 border-l-2 border-indigo-600">
-          </p>
-        </div>
+        <p id="ins-narrative"
+           class="text-gray-200 leading-relaxed text-sm bg-gray-800/40 rounded-lg p-4
+                  border-l-2 border-indigo-600"></p>
 
         <!-- Confidence -->
         <div>
-          <div class="flex justify-between text-xs mb-1">
-            <span class="text-gray-500 uppercase tracking-wide">Confidence</span>
-            <span id="ins-conf-pct" class="font-mono text-indigo-300"></span>
+          <div class="flex justify-between text-xs mb-1.5">
+            <span class="text-gray-500 uppercase tracking-wide font-medium">Confidence</span>
+            <span id="ins-conf-pct" class="font-mono font-semibold text-indigo-300"></span>
           </div>
-          <div class="w-full bg-gray-800 rounded-full h-2">
-            <div id="ins-conf-bar"
-                 class="h-2 rounded-full transition-all duration-700"
+          <div class="w-full bg-gray-800 rounded-full h-1.5">
+            <div id="ins-conf-bar" class="h-1.5 rounded-full transition-all duration-700"
                  style="width:0%"></div>
           </div>
-          <p id="ins-conf-rationale" class="text-xs text-gray-500 mt-1"></p>
+          <p id="ins-conf-rationale" class="text-xs text-gray-500 mt-1.5"></p>
         </div>
 
-        <!-- Evidence chain -->
+        <!-- Evidence -->
         <div>
-          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Evidence chain</div>
-          <div id="ins-evidence" class="flex flex-wrap gap-2"></div>
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            Evidence chain
+          </div>
+          <div id="ins-evidence" class="flex flex-wrap gap-1.5"></div>
         </div>
 
         <!-- Hypothesis -->
-        <div id="ins-hypothesis-block" class="hidden">
-          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Root-cause hypothesis</div>
-          <div class="bg-amber-950/40 border border-amber-800/40 rounded-lg p-4">
+        <div id="ins-hyp-block" class="hidden">
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            Root-cause hypothesis
+          </div>
+          <div class="bg-amber-950/30 border border-amber-800/30 rounded-lg p-4">
             <p id="ins-hypothesis" class="text-amber-200 text-sm"></p>
           </div>
         </div>
@@ -239,7 +278,7 @@
         <!-- Meta -->
         <div class="flex items-center gap-4 text-xs text-gray-600 border-t border-gray-800 pt-3">
           <span id="ins-model"></span>
-          <span id="ins-cached"></span>
+          <span id="ins-cached" class="text-indigo-500"></span>
         </div>
       </div>
     </section>
@@ -247,52 +286,144 @@
   </main>
 
   <script>
-    // ── State ───────────────────────────────────────────────────────────
-    let reviewerChart = null;
-    let lastMetrics = null;
+    // ── Constants ─────────────────────────────────────────────────────
+    const GITHUB_URL_RE = /(?:https?:\/\/)?(?:www\.)?github\.com\/([^\/\s]+\/[^\/\s?#]+)/;
+    const OWNER_NAME_RE = /^[\w.\-]+\/[\w.\-]+$/;
 
-    // ── Helpers ──────────────────────────────────────────────────────────
-    function getParams() {
-      return {
-        repo: document.getElementById('repo').value.trim() || 'pallets/flask',
-        since: document.getElementById('since').value,
-        until: document.getElementById('until').value,
-      };
+    // ── State ─────────────────────────────────────────────────────────
+    let reviewerChart = null;
+
+    // ── Init: set sensible date defaults ─────────────────────────────
+    (function initDates() {
+      const today = new Date();
+      const sixAgo = new Date(today);
+      sixAgo.setMonth(sixAgo.getMonth() - 6);
+      document.getElementById('since').value = fmt(sixAgo);
+      document.getElementById('until').value = fmt(today);
+      function fmt(d) { return d.toISOString().slice(0, 10); }
+    })();
+
+    // ── URL parsing ───────────────────────────────────────────────────
+    function parseRepo(raw) {
+      const s = (raw || '').trim();
+      if (!s) return null;
+      const m = s.match(GITHUB_URL_RE);
+      if (m) {
+        let repo = m[1].replace(/\.git$/, '').replace(/\/$/, '');
+        repo = repo.split('/').slice(0, 2).join('/');
+        return OWNER_NAME_RE.test(repo) ? repo : null;
+      }
+      return OWNER_NAME_RE.test(s) ? s : null;
     }
 
-    function show(id) { document.getElementById(id).classList.remove('hidden'); }
-    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+    function onRepoInput() {
+      const raw = document.getElementById('repo-input').value;
+      const repo = parseRepo(raw);
+      const hint = document.getElementById('parse-hint');
+      const btn  = document.getElementById('analyze-btn');
 
-    function setStatus(html, color = 'text-gray-400') {
-      const el = document.getElementById('sync-status');
-      el.innerHTML = html;
-      el.className = `mt-3 text-sm ${color}`;
+      if (!raw.trim()) {
+        hint.innerHTML = '';
+        btn.disabled = true;
+        return;
+      }
+      if (repo) {
+        hint.innerHTML = `<span class="text-emerald-500">✓ Detected: <strong class="font-mono">${repo}</strong></span>`;
+        btn.disabled = false;
+      } else {
+        hint.innerHTML = `<span class="text-red-400">Not a valid GitHub URL or owner/name format</span>`;
+        btn.disabled = true;
+      }
+    }
+
+    // ── Pipeline step helpers ─────────────────────────────────────────
+    function setStep(name, state, detail) {
+      const el = document.getElementById('step-' + name);
+      const icon = document.getElementById('icon-' + name);
+      const detailEl = document.getElementById('detail-' + name);
+      el.className = 'step-item step-' + state + ' flex items-center gap-2 text-sm';
+      if (state === 'running') icon.innerHTML = '<span class="spinner"></span>';
+      else if (state === 'done')  icon.textContent = '✓';
+      else if (state === 'error') icon.textContent = '✗';
+      else icon.textContent = '○';
+      if (detail) detailEl.textContent = detail;
+    }
+
+    function showPipelineError(msg) {
+      const el = document.getElementById('pipeline-error');
+      el.textContent = msg;
       el.classList.remove('hidden');
     }
 
-    function fmtHours(h) {
-      if (h == null) return '–';
-      if (h < 1) return `${Math.round(h * 60)}m`;
-      if (h < 24) return `${h.toFixed(1)}h`;
-      return `${(h / 24).toFixed(1)}d`;
+    function hidePipelineError() {
+      document.getElementById('pipeline-error').classList.add('hidden');
     }
 
-    function confidenceColor(score) {
-      if (score >= 0.7) return '#22c55e';
-      if (score >= 0.4) return '#f59e0b';
-      return '#ef4444';
+    function revealSection(id) {
+      const el = document.getElementById(id);
+      el.classList.add('visible');
     }
 
-    // ── Sync ─────────────────────────────────────────────────────────────
-    async function runSync() {
-      const { repo, since, until } = getParams();
-      if (!repo) { setStatus('Enter a repository first.', 'text-yellow-400'); return; }
+    // ── Main analyze flow ─────────────────────────────────────────────
+    async function analyze() {
+      const raw  = document.getElementById('repo-input').value;
+      const repo = parseRepo(raw);
+      const since = document.getElementById('since').value;
+      const until = document.getElementById('until').value;
 
-      document.getElementById('sync-icon').innerHTML = '<span class="spinner"></span>';
-      document.getElementById('sync-label').textContent = 'Syncing…';
-      document.getElementById('sync-btn').disabled = true;
-      setStatus('Syncing… this may take 10–30 seconds for large repos.', 'text-indigo-400');
+      if (!repo) return;
 
+      // Reset UI
+      hidePipelineError();
+      ['sync','metrics','insight'].forEach(s => setStep(s, 'pending', null));
+      ['sec-reviewload','sec-cycletime','sec-insight'].forEach(id => {
+        document.getElementById(id).classList.remove('visible');
+      });
+      ['rl-content','ct-content','ins-content'].forEach(id => hide(id));
+      ['rl-placeholder','ct-placeholder','ins-placeholder'].forEach(id => show(id));
+      document.getElementById('pipeline').classList.remove('hidden');
+
+      // Disable button while running
+      const btn = document.getElementById('analyze-btn');
+      const btnIcon = document.getElementById('btn-icon');
+      const btnLabel = document.getElementById('btn-label');
+      btn.disabled = true;
+      btnIcon.innerHTML = '<span class="spinner" style="border-top-color:#fff;width:14px;height:14px"></span>';
+      btnLabel.textContent = 'Analyzing…';
+
+      try {
+        // ── Step 1: Sync ──────────────────────────────────────────
+        setStep('sync', 'running', 'Contacting GitHub…');
+        const syncOk = await doSync(repo, since, until);
+        if (!syncOk) return;
+
+        // ── Step 2: Metrics ───────────────────────────────────────
+        setStep('metrics', 'running', 'Computing review load and cycle time…');
+        const [rlOk, ctOk] = await Promise.all([
+          loadReviewLoad(repo, since, until),
+          loadCycleTime(repo, since, until),
+        ]);
+        if (!rlOk) return;
+        setStep('metrics', 'done', 'Review load · Cycle time');
+        revealSection('sec-reviewload');
+        revealSection('sec-cycletime');
+
+        // ── Step 3: Insight ───────────────────────────────────────
+        setStep('insight', 'running', 'Calling LLM…');
+        await loadInsight(repo, since, until);
+        setStep('insight', 'done', 'Done');
+        revealSection('sec-insight');
+
+      } finally {
+        btn.disabled = false;
+        btnIcon.textContent = '▶';
+        btnLabel.textContent = 'Analyze';
+      }
+    }
+
+    // ── API calls ─────────────────────────────────────────────────────
+
+    async function doSync(repo, since, until) {
       try {
         const res = await fetch('/sync', {
           method: 'POST',
@@ -300,83 +431,96 @@
           body: JSON.stringify({ repo, since, until }),
         });
         const data = await res.json();
-
-        if (!res.ok) {
-          setStatus(`✗ Sync failed: ${data.detail || JSON.stringify(data)}`, 'text-red-400');
-        } else if (data.status === 'success') {
-          setStatus(
-            `✓ Sync complete — <strong>${data.rows_ingested}</strong> rows ingested for <em>${repo}</em>`,
-            'text-green-400'
-          );
-          await loadMetrics();
-          await loadCycleTime();
-        } else {
-          setStatus(`✗ Sync error: ${data.error || data.status}`, 'text-red-400');
+        if (!res.ok || data.status === 'failed') {
+          const msg = data.error || data.detail || JSON.stringify(data);
+          setStep('sync', 'error', msg.slice(0, 80));
+          showPipelineError('Sync failed: ' + msg);
+          return false;
         }
+        setStep('sync', 'done', `${data.rows_ingested.toLocaleString()} rows ingested`);
+        return true;
       } catch (e) {
-        setStatus(`✗ Network error: ${e.message}`, 'text-red-400');
-      } finally {
-        document.getElementById('sync-icon').textContent = '▶';
-        document.getElementById('sync-label').textContent = 'Sync';
-        document.getElementById('sync-btn').disabled = false;
+        setStep('sync', 'error', e.message);
+        showPipelineError('Sync error: ' + e.message);
+        return false;
       }
     }
 
-    // ── Review Load ───────────────────────────────────────────────────────
-    async function loadMetrics() {
-      const { repo, since: from, until: to } = getParams();
-      hide('rl-empty'); hide('rl-content');
-      show('rl-loading');
-
+    async function loadReviewLoad(repo, since, until) {
       try {
         const res = await fetch(
-          `/metrics/review-load?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}&top=15`
+          `/metrics/review-load?repo=${enc(repo)}&from=${since}&to=${until}&top=15`
         );
-        if (!res.ok) {
-          const err = await res.json();
-          hide('rl-loading');
-          show('rl-empty');
-          document.getElementById('rl-empty').textContent =
-            err.detail || 'No data. Run sync first.';
-          return;
-        }
         const data = await res.json();
-        lastMetrics = data;
-        renderReviewLoad(data);
+        if (!res.ok) {
+          setStep('metrics', 'error', data.detail || 'Metrics error');
+          showPipelineError('Metrics error: ' + (data.detail || ''));
+          return false;
+        }
+        renderReviewLoad(data, since, until);
+        return true;
       } catch (e) {
-        hide('rl-loading');
-        show('rl-empty');
-        document.getElementById('rl-empty').textContent = `Error: ${e.message}`;
+        setStep('metrics', 'error', e.message);
+        return false;
       }
     }
 
-    function renderReviewLoad(data) {
-      hide('rl-loading'); hide('rl-empty');
+    async function loadCycleTime(repo, since, until) {
+      try {
+        const res = await fetch(
+          `/metrics/cycle-time?repo=${enc(repo)}&from=${since}&to=${until}`
+        );
+        if (!res.ok) return false;
+        const data = await res.json();
+        renderCycleTime(data, since, until);
+        return true;
+      } catch { return false; }
+    }
 
+    async function loadInsight(repo, since, until) {
+      try {
+        const res = await fetch(
+          `/insights?repo=${enc(repo)}&from=${since}&to=${until}&metric=review-load`
+        );
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = typeof data.detail === 'string' ? data.detail
+            : (data.detail?.message || JSON.stringify(data.detail));
+          setStep('insight', 'error', msg?.slice(0, 80) || 'Error');
+          showPipelineError('Insight error: ' + (msg || ''));
+          return;
+        }
+        renderInsight(data);
+      } catch (e) {
+        setStep('insight', 'error', e.message);
+        showPipelineError('Insight error: ' + e.message);
+      }
+    }
+
+    // ── Renderers ─────────────────────────────────────────────────────
+
+    function renderReviewLoad(data, since, until) {
+      hide('rl-placeholder'); show('rl-content');
+      document.getElementById('rl-period').textContent = `${since} → ${until}`;
       document.getElementById('stat-prs').textContent = data.totals.prs.toLocaleString();
       document.getElementById('stat-reviews').textContent = data.totals.reviews.toLocaleString();
       document.getElementById('stat-gini').textContent = data.gini.toFixed(3);
 
-      // Concentration badges
-      const row = document.getElementById('concentration-row');
-      row.innerHTML = `
-        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
-          Top-1: <strong>${(data.top_n_share.top1 * 100).toFixed(1)}%</strong>
+      document.getElementById('concentration-row').innerHTML = [
+        ['Top-1', data.top_n_share.top1],
+        ['Top-3', data.top_n_share.top3],
+        ['Top-5', data.top_n_share.top5],
+      ].map(([label, val]) => `
+        <span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-xs">
+          ${label}: <strong class="text-gray-200">${(val * 100).toFixed(1)}%</strong>
         </span>
-        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
-          Top-3: <strong>${(data.top_n_share.top3 * 100).toFixed(1)}%</strong>
-        </span>
-        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
-          Top-5: <strong>${(data.top_n_share.top5 * 100).toFixed(1)}%</strong>
-        </span>
-        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
-          Reviewers: <strong>${data.totals.reviewers}</strong>
-        </span>
-      `;
+      `).join('') + `
+        <span class="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-xs">
+          Reviewers: <strong class="text-gray-200">${data.totals.reviewers}</strong>
+        </span>`;
 
-      // Chart
       const labels = data.reviewers.map(r => r.login);
-      const values = data.reviewers.map(r => parseFloat((r.share_of_reviews * 100).toFixed(1)));
+      const values = data.reviewers.map(r => +(r.share_of_reviews * 100).toFixed(1));
 
       if (reviewerChart) reviewerChart.destroy();
       const ctx = document.getElementById('reviewerChart').getContext('2d');
@@ -385,12 +529,10 @@
         data: {
           labels,
           datasets: [{
-            label: 'Share of reviews (%)',
             data: values,
             backgroundColor: values.map((_, i) =>
-              i === 0 ? '#6366f1' : i < 3 ? '#8b5cf6' : '#4b5563'
-            ),
-            borderRadius: 4,
+              i === 0 ? '#6366f1' : i < 3 ? '#8b5cf6' : '#374151'),
+            borderRadius: 3,
           }],
         },
         options: {
@@ -401,150 +543,75 @@
             legend: { display: false },
             tooltip: {
               callbacks: {
+                title: ctx => ctx[0].label,
                 label: ctx => {
                   const r = data.reviewers[ctx.dataIndex];
-                  return [
-                    ` ${ctx.parsed.x}% of reviews`,
-                    ` ${r.reviews} reviews · ${r.approvals} approvals`,
-                    r.median_hours_to_first_review != null
-                      ? ` Median TTR: ${fmtHours(r.median_hours_to_first_review)}`
-                      : '',
-                  ].filter(Boolean);
+                  const lines = [` ${ctx.parsed.x}% of all reviews`];
+                  if (r.median_hours_to_first_review != null)
+                    lines.push(` Median TTR: ${fmtH(r.median_hours_to_first_review)}`);
+                  lines.push(` Approvals: ${r.approvals}`);
+                  return lines;
                 },
               },
             },
           },
           scales: {
             x: {
-              ticks: { color: '#9ca3af', callback: v => v + '%' },
+              ticks: { color: '#6b7280', callback: v => v + '%' },
               grid: { color: '#1f2937' },
             },
-            y: { ticks: { color: '#d1d5db', font: { family: 'monospace', size: 11 } } },
+            y: { ticks: { color: '#d1d5db', font: { size: 11, family: 'monospace' } } },
           },
         },
       });
-
-      show('rl-content');
     }
 
-    // ── Cycle Time ────────────────────────────────────────────────────────
-    async function loadCycleTime() {
-      const { repo, since: from, until: to } = getParams();
-      hide('ct-empty'); hide('ct-content');
-      show('ct-loading');
+    function renderCycleTime(data, since, until) {
+      hide('ct-placeholder'); show('ct-content');
+      document.getElementById('ct-period').textContent = `${since} → ${until}`;
 
-      try {
-        const res = await fetch(
-          `/metrics/cycle-time?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}`
-        );
-        if (!res.ok) {
-          hide('ct-loading'); show('ct-empty');
-          const err = await res.json();
-          document.getElementById('ct-empty').textContent = err.detail || 'No data.';
-          return;
-        }
-        const data = await res.json();
-        renderCycleTime(data);
-      } catch (e) {
-        hide('ct-loading'); show('ct-empty');
-        document.getElementById('ct-empty').textContent = `Error: ${e.message}`;
-      }
-    }
-
-    function renderCycleTime(data) {
-      hide('ct-loading'); hide('ct-empty');
-
-      // Overall row
-      document.getElementById('ct-overall').innerHTML = `
-        <div class="bg-gray-800 rounded-lg p-3 text-center">
-          <div class="text-xs text-gray-500 mb-1">Time to First Review</div>
-          <div class="text-sm font-bold text-white">
-            ${fmtHours(data.time_to_first_review.p50_hours)}
-            <span class="text-gray-500 font-normal text-xs">p50</span>
-          </div>
-          <div class="text-xs text-gray-600">
-            ${fmtHours(data.time_to_first_review.p90_hours)} p90
-          </div>
+      document.getElementById('ct-overall').innerHTML = [
+        ['First Review', data.time_to_first_review],
+        ['Merge', data.time_to_merge],
+        ['Merged PRs', null],
+      ].map(([label, stat], i) => i < 2 ? `
+        <div class="bg-gray-800/60 rounded-lg p-3 text-center">
+          <div class="text-xs text-gray-500 mb-1">${label}</div>
+          <div class="text-sm font-bold text-white">${fmtH(stat.p50_hours)} <span class="text-gray-500 font-normal text-xs">p50</span></div>
+          <div class="text-xs text-gray-600">${fmtH(stat.p90_hours)} p90</div>
         </div>
-        <div class="bg-gray-800 rounded-lg p-3 text-center">
-          <div class="text-xs text-gray-500 mb-1">Time to Merge</div>
-          <div class="text-sm font-bold text-white">
-            ${fmtHours(data.time_to_merge.p50_hours)}
-            <span class="text-gray-500 font-normal text-xs">p50</span>
-          </div>
-          <div class="text-xs text-gray-600">
-            ${fmtHours(data.time_to_merge.p90_hours)} p90
-          </div>
-        </div>
-        <div class="bg-gray-800 rounded-lg p-3 text-center">
+      ` : `
+        <div class="bg-gray-800/60 rounded-lg p-3 text-center">
           <div class="text-xs text-gray-500 mb-1">Merged PRs</div>
           <div class="text-sm font-bold text-white">${data.pr_count}</div>
           <div class="text-xs text-gray-600">in period</div>
         </div>
-      `;
-
-      // Per-author table
-      const tbody = document.getElementById('ct-table');
-      tbody.innerHTML = data.by_author.slice(0, 12).map(a => `
-        <tr>
-          <td class="py-1.5 pr-2 font-mono text-gray-300">${a.author}</td>
-          <td class="py-1.5 pr-2 text-right text-gray-400">${a.pr_count}</td>
-          <td class="py-1.5 pr-2 text-right text-gray-300">
-            ${fmtHours(a.time_to_first_review.p50_hours)}
-          </td>
-          <td class="py-1.5 text-right text-gray-300">
-            ${fmtHours(a.time_to_merge.p50_hours)}
-          </td>
-        </tr>
       `).join('');
 
-      show('ct-content');
-    }
-
-    // ── Insight ───────────────────────────────────────────────────────────
-    async function loadInsight() {
-      const { repo, since: from, until: to } = getParams();
-      hide('ins-empty'); hide('ins-content');
-      show('ins-loading');
-
-      try {
-        const res = await fetch(
-          `/insights?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}&metric=review-load`
-        );
-        if (!res.ok) {
-          const err = await res.json();
-          hide('ins-loading'); show('ins-empty');
-          document.getElementById('ins-empty').textContent =
-            (err.detail && typeof err.detail === 'string') ? err.detail
-            : 'Load metrics first, then generate insight.';
-          return;
-        }
-        const data = await res.json();
-        renderInsight(data);
-      } catch (e) {
-        hide('ins-loading'); show('ins-empty');
-        document.getElementById('ins-empty').textContent = `Error: ${e.message}`;
-      }
+      document.getElementById('ct-table').innerHTML = data.by_author.slice(0, 12).map(a => `
+        <tr>
+          <td class="py-1.5 pr-2 font-mono text-gray-300 text-xs">${a.author}</td>
+          <td class="py-1.5 pr-2 text-right text-gray-400 text-xs">${a.pr_count}</td>
+          <td class="py-1.5 pr-2 text-right text-gray-300 text-xs">${fmtH(a.time_to_first_review.p50_hours)}</td>
+          <td class="py-1.5 text-right text-gray-300 text-xs">${fmtH(a.time_to_merge.p50_hours)}</td>
+        </tr>
+      `).join('');
     }
 
     function renderInsight(data) {
-      hide('ins-loading'); hide('ins-empty');
-
+      hide('ins-placeholder'); show('ins-content');
       document.getElementById('ins-narrative').textContent = data.narrative;
 
-      // Confidence
       const pct = Math.round(data.confidence.score * 100);
-      document.getElementById('ins-conf-pct').textContent = `${pct}%`;
+      document.getElementById('ins-conf-pct').textContent = pct + '%';
       document.getElementById('ins-conf-rationale').textContent = data.confidence.rationale;
       const bar = document.getElementById('ins-conf-bar');
-      bar.style.width = `${pct}%`;
-      bar.style.background = confidenceColor(data.confidence.score);
+      bar.style.width = pct + '%';
+      bar.style.background = pct >= 70 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444';
 
-      // Evidence
-      const evEl = document.getElementById('ins-evidence');
-      evEl.innerHTML = (data.evidence || []).map(ev => `
-        <span class="evidence-badge" title="${ev.metric}: ${ev.value} (${ev.period})">
-          <span class="text-gray-500">${ev.id}</span>
+      document.getElementById('ins-evidence').innerHTML = (data.evidence || []).map(ev => `
+        <span class="evidence-badge" title="${ev.metric} = ${ev.value} · ${ev.period}">
+          <span style="color:#6b7280">${ev.id}</span>
           ${ev.metric}=<strong>${
             typeof ev.value === 'number' && ev.value < 10
               ? ev.value.toFixed(3)
@@ -553,8 +620,7 @@
         </span>
       `).join('');
 
-      // Hypothesis
-      const hypBlock = document.getElementById('ins-hypothesis-block');
+      const hypBlock = document.getElementById('ins-hyp-block');
       if (data.hypothesis) {
         document.getElementById('ins-hypothesis').textContent = data.hypothesis.claim;
         hypBlock.classList.remove('hidden');
@@ -562,19 +628,23 @@
         hypBlock.classList.add('hidden');
       }
 
-      // Meta
       document.getElementById('ins-model').textContent =
-        `Model: ${data.model?.name ?? '–'} · Prompt: ${data.model?.prompt_version ?? '–'}`;
-      document.getElementById('ins-cached').textContent =
-        data.cached ? '⚡ cached' : '';
-
-      show('ins-content');
+        data.model ? `${data.model.name} · ${data.model.prompt_version}` : '';
+      const cachedEl = document.getElementById('ins-cached');
+      cachedEl.textContent = data.cached ? '⚡ cached result' : '';
     }
 
-    // ── Keyboard shortcut: Enter in repo field syncs ──────────────────────
-    document.getElementById('repo').addEventListener('keydown', e => {
-      if (e.key === 'Enter') runSync();
-    });
+    // ── Utilities ─────────────────────────────────────────────────────
+    function enc(s) { return encodeURIComponent(s); }
+    function show(id) { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function fmtH(h) {
+      if (h == null) return '–';
+      if (h < 1)  return Math.round(h * 60) + 'm';
+      if (h < 24) return h.toFixed(1) + 'h';
+      return (h / 24).toFixed(1) + 'd';
+    }
   </script>
 </body>
 </html>

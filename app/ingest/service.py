@@ -177,10 +177,16 @@ class IngestService:
         from app.github.client import ReviewData
 
         rows = 0
-        first_review_at = pr_row.first_review_at
+        # SQLite stores datetimes without tzinfo; normalise to naive UTC throughout.
+        first_review_at = (
+            pr_row.first_review_at.replace(tzinfo=None)
+            if pr_row.first_review_at and pr_row.first_review_at.tzinfo
+            else pr_row.first_review_at
+        )
         for rv in reviews:
             if not isinstance(rv, ReviewData):
                 continue
+            submitted_naive = rv.submitted_at.replace(tzinfo=None)
             stmt = (
                 sqlite_insert(Review)
                 .values(
@@ -188,18 +194,18 @@ class IngestService:
                     github_id=rv.github_id,
                     reviewer=rv.reviewer,
                     state=rv.state,
-                    submitted_at=rv.submitted_at,
+                    submitted_at=submitted_naive,
                 )
                 .on_conflict_do_update(
                     index_elements=["pr_id", "github_id"],
-                    set_={"state": rv.state, "submitted_at": rv.submitted_at},
+                    set_={"state": rv.state, "submitted_at": submitted_naive},
                 )
             )
             result = await self._session.execute(stmt)
             rows += result.rowcount
 
-            if first_review_at is None or rv.submitted_at < first_review_at:
-                first_review_at = rv.submitted_at
+            if first_review_at is None or submitted_naive < first_review_at:
+                first_review_at = submitted_naive
 
         if first_review_at != pr_row.first_review_at:
             await self._session.execute(

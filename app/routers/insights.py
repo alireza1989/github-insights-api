@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.deps import get_app_settings, get_session
+from app.github.utils import normalize_repo
 from app.insights.service import generate_insight
 from app.routers.metrics import _get_repo, review_load
 from app.schemas.insights import InsightResponse
@@ -33,7 +34,7 @@ def _check_rate_limit(ip: str, limit_per_minute: int) -> None:
 @router.get("/insights", response_model=InsightResponse)
 async def get_insight(
     request: Request,
-    repo: str = Query(..., description="Repository in owner/name format"),
+    repo: str = Query(..., description="Repository as 'owner/name' or a full GitHub URL"),
     from_date: date = Query(..., alias="from", description="Start date (inclusive)"),
     to_date: date = Query(..., alias="to", description="End date (inclusive)"),
     metric: Literal["review-load"] = Query("review-load", description="Metric to analyse"),
@@ -49,6 +50,7 @@ async def get_insight(
     """
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip, settings.rate_limit_per_minute)
+    repo = normalize_repo(repo)
 
     # Reuse the metrics endpoint to get the underlying data
     metrics = await review_load(

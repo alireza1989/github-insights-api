@@ -12,6 +12,7 @@ import typer
 
 from app.config import get_settings
 from app.db import build_engine, build_session_factory, create_tables
+from app.github.utils import normalize_repo
 from app.ingest.service import IngestService
 from app.logging_config import configure_logging
 
@@ -20,12 +21,12 @@ cli = typer.Typer(help="GitHub Insights API — CLI tools")
 
 @cli.command()
 def sync(
-    repo: str = typer.Option(..., help="Repository in owner/name format"),
+    repo: str = typer.Option(..., help="Repository as 'owner/name' or a full GitHub URL"),
     since: str = typer.Option(..., help="Start date (YYYY-MM-DD)"),
     until: str = typer.Option(..., help="End date (YYYY-MM-DD)"),
 ) -> None:
     """Ingest a repository for a given date range."""
-    asyncio.run(_sync(repo, date.fromisoformat(since), date.fromisoformat(until)))
+    asyncio.run(_sync(normalize_repo(repo), date.fromisoformat(since), date.fromisoformat(until)))
 
 
 async def _sync(repo: str, since: date, until: date) -> None:

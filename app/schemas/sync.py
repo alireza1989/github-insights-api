@@ -1,10 +1,9 @@
-import re
 from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-_REPO_RE = re.compile(r"^[\w.\-]+/[\w.\-]+$")
+from app.github.utils import normalize_repo
 
 
 class SyncRequest(BaseModel):
@@ -15,9 +14,7 @@ class SyncRequest(BaseModel):
     @field_validator("repo")
     @classmethod
     def validate_repo(cls, v: str) -> str:
-        if not _REPO_RE.match(v):
-            raise ValueError("repo must be in 'owner/name' format")
-        return v
+        return normalize_repo(v)
 
     @field_validator("until")
     @classmethod

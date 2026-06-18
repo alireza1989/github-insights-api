@@ -35,16 +35,24 @@ uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-### Try it out
+### Web UI (easiest)
+
+Open `http://localhost:8000`, paste any public GitHub URL (e.g. `https://github.com/pallets/flask`),
+pick a date range, and click **Analyze**. The dashboard syncs data, computes metrics, and generates
+an AI insight automatically.
+
+### API / curl
+
+The `repo` parameter accepts a full GitHub URL **or** `owner/name` format interchangeably.
 
 ```bash
 # 1. Sync a repository (fetches PRs, reviews, commits)
 curl -X POST http://localhost:8000/sync \
   -H 'Content-Type: application/json' \
-  -d '{"repo":"pallets/flask","since":"2024-01-01","until":"2024-06-30"}'
+  -d '{"repo":"https://github.com/pallets/flask","since":"2024-01-01","until":"2024-06-30"}'
 
 # 2. Reviewer-load metrics
-curl 'http://localhost:8000/metrics/review-load?repo=pallets/flask&from=2024-01-01&to=2024-06-30'
+curl 'http://localhost:8000/metrics/review-load?repo=https://github.com/pallets/flask&from=2024-01-01&to=2024-06-30'
 
 # 3. Cycle-time metrics
 curl 'http://localhost:8000/metrics/cycle-time?repo=pallets/flask&from=2024-01-01&to=2024-06-30'
@@ -53,7 +61,7 @@ curl 'http://localhost:8000/metrics/cycle-time?repo=pallets/flask&from=2024-01-0
 curl 'http://localhost:8000/insights?repo=pallets/flask&from=2024-01-01&to=2024-06-30'
 ```
 
-Or open `http://localhost:8000` for the web UI.
+Open `http://localhost:8000/docs` for the interactive OpenAPI explorer.
 
 ## Environment variables
 

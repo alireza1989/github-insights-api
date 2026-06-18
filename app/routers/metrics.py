@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_session
+from app.github.utils import normalize_repo
 from app.metrics.cycle_time import compute_cycle_time
 from app.metrics.review_load import compute_review_load
 from app.models.pull_request import PullRequest
@@ -31,13 +32,14 @@ async def _get_repo(session: AsyncSession, repo: str) -> Repository:
 
 @router.get("/review-load", response_model=ReviewLoadResponse)
 async def review_load(
-    repo: str = Query(..., description="Repository in owner/name format"),
+    repo: str = Query(..., description="Repository as 'owner/name' or a full GitHub URL"),
     from_date: date = Query(..., alias="from", description="Start date (inclusive)"),
     to_date: date = Query(..., alias="to", description="End date (inclusive)"),
     top: int = Query(10, ge=1, le=50, description="Number of top reviewers to return"),
     session: AsyncSession = Depends(get_session),
 ) -> ReviewLoadResponse:
     """Reviewer-load distribution with Gini coefficient and per-reviewer breakdown."""
+    repo = normalize_repo(repo)
     repo_row = await _get_repo(session, repo)
 
     from_dt = date(from_date.year, from_date.month, from_date.day)
@@ -69,12 +71,13 @@ async def review_load(
 
 @router.get("/cycle-time", response_model=CycleTimeResponse)
 async def cycle_time(
-    repo: str = Query(..., description="Repository in owner/name format"),
+    repo: str = Query(..., description="Repository as 'owner/name' or a full GitHub URL"),
     from_date: date = Query(..., alias="from", description="Start date (inclusive)"),
     to_date: date = Query(..., alias="to", description="End date (inclusive)"),
     session: AsyncSession = Depends(get_session),
 ) -> CycleTimeResponse:
     """PR cycle-time: p50/p90 for time-to-first-review, approval, and merge."""
+    repo = normalize_repo(repo)
     repo_row = await _get_repo(session, repo)
 
     prs_result = await session.execute(
