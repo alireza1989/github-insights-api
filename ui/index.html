@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Insights API</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .card { @apply bg-gray-900 border border-gray-800 rounded-xl p-6; }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .evidence-badge {
+      @apply inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-mono
+             bg-indigo-950 border border-indigo-800 text-indigo-300 cursor-pointer;
+    }
+    .evidence-badge:hover { @apply bg-indigo-900; }
+    .spinner {
+      border: 2px solid rgba(99,102,241,0.3);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      width: 18px; height: 18px;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="min-h-full text-gray-100">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <svg class="w-7 h-7 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        <span class="text-lg font-semibold text-white">GitHub Insights API</span>
+      </div>
+      <div class="flex gap-4 text-sm">
+        <a href="/docs" target="_blank"
+           class="text-gray-400 hover:text-indigo-400 transition-colors flex items-center gap-1">
+          API Docs
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          </svg>
+        </a>
+        <a href="/health" target="_blank" class="text-gray-400 hover:text-green-400 transition-colors">
+          Health
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 space-y-6">
+
+    <!-- Sync Panel -->
+    <section class="card">
+      <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+        1 — Sync Repository
+      </h2>
+      <div class="flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-48">
+          <label class="block text-xs text-gray-500 mb-1">Repository</label>
+          <input id="repo" type="text" placeholder="pallets/flask"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm
+                   text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">From</label>
+          <input id="since" type="date" value="2024-01-01"
+            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                   focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">To</label>
+          <input id="until" type="date" value="2024-06-30"
+            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                   focus:outline-none focus:border-indigo-500" />
+        </div>
+        <button id="sync-btn" onclick="runSync()"
+          class="btn-primary text-white text-sm font-medium px-5 py-2 rounded-lg transition-opacity
+                 flex items-center gap-2">
+          <span id="sync-icon">▶</span>
+          <span id="sync-label">Sync</span>
+        </button>
+      </div>
+      <div id="sync-status" class="mt-3 text-sm hidden"></div>
+    </section>
+
+    <!-- Metrics Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Review Load -->
+      <section class="card space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            2 — Reviewer Load
+          </h2>
+          <button onclick="loadMetrics()"
+            class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+            Refresh
+          </button>
+        </div>
+
+        <div id="rl-loading" class="hidden text-center py-8 text-gray-500 text-sm">
+          <div class="spinner mx-auto mb-2"></div> Loading metrics…
+        </div>
+        <div id="rl-empty" class="text-center py-8 text-gray-600 text-sm">
+          Run a sync then click <em>Refresh</em>
+        </div>
+        <div id="rl-content" class="hidden space-y-4">
+          <!-- Stats row -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+              <div id="stat-prs" class="text-2xl font-bold text-white">–</div>
+              <div class="text-xs text-gray-500 mt-0.5">PRs</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+              <div id="stat-reviews" class="text-2xl font-bold text-white">–</div>
+              <div class="text-xs text-gray-500 mt-0.5">Reviews</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+              <div id="stat-gini" class="text-2xl font-bold text-white">–</div>
+              <div class="text-xs text-gray-500 mt-0.5">Gini</div>
+            </div>
+          </div>
+          <!-- Concentration badges -->
+          <div id="concentration-row" class="flex gap-2 text-xs flex-wrap"></div>
+          <!-- Chart -->
+          <div class="relative h-56">
+            <canvas id="reviewerChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cycle Time -->
+      <section class="card space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            3 — Cycle Time
+          </h2>
+          <button onclick="loadCycleTime()"
+            class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
+            Refresh
+          </button>
+        </div>
+
+        <div id="ct-loading" class="hidden text-center py-8 text-gray-500 text-sm">
+          <div class="spinner mx-auto mb-2"></div> Loading…
+        </div>
+        <div id="ct-empty" class="text-center py-8 text-gray-600 text-sm">
+          Run a sync then click <em>Refresh</em>
+        </div>
+        <div id="ct-content" class="hidden space-y-3">
+          <!-- Overall stats -->
+          <div id="ct-overall" class="grid grid-cols-3 gap-3"></div>
+          <!-- Per-author table -->
+          <div class="overflow-auto max-h-52">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-gray-500 border-b border-gray-800">
+                  <th class="text-left pb-1 pr-2">Author</th>
+                  <th class="text-right pb-1 pr-2">PRs</th>
+                  <th class="text-right pb-1 pr-2">TTR p50</th>
+                  <th class="text-right pb-1">TTM p50</th>
+                </tr>
+              </thead>
+              <tbody id="ct-table" class="divide-y divide-gray-800/50"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Insight Panel -->
+    <section class="card space-y-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+          4 — LLM Insight
+        </h2>
+        <button onclick="loadInsight()"
+          class="text-xs bg-indigo-900/50 border border-indigo-700 text-indigo-300
+                 hover:bg-indigo-900 px-3 py-1 rounded-md transition-colors">
+          ✦ Generate / Refresh
+        </button>
+      </div>
+
+      <div id="ins-loading" class="hidden text-center py-8 text-gray-500 text-sm">
+        <div class="spinner mx-auto mb-3"></div>
+        Calling LLM… (may take a few seconds)
+      </div>
+      <div id="ins-empty" class="text-center py-8 text-gray-600 text-sm">
+        Load metrics first, then click <em>Generate / Refresh</em>
+      </div>
+      <div id="ins-content" class="hidden space-y-5">
+
+        <!-- Narrative -->
+        <div>
+          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Narrative</div>
+          <p id="ins-narrative"
+             class="text-gray-200 leading-relaxed text-sm bg-gray-800/50 rounded-lg p-4 border-l-2 border-indigo-600">
+          </p>
+        </div>
+
+        <!-- Confidence -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-gray-500 uppercase tracking-wide">Confidence</span>
+            <span id="ins-conf-pct" class="font-mono text-indigo-300"></span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2">
+            <div id="ins-conf-bar"
+                 class="h-2 rounded-full transition-all duration-700"
+                 style="width:0%"></div>
+          </div>
+          <p id="ins-conf-rationale" class="text-xs text-gray-500 mt-1"></p>
+        </div>
+
+        <!-- Evidence chain -->
+        <div>
+          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Evidence chain</div>
+          <div id="ins-evidence" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Hypothesis -->
+        <div id="ins-hypothesis-block" class="hidden">
+          <div class="text-xs text-gray-500 uppercase tracking-wide mb-2">Root-cause hypothesis</div>
+          <div class="bg-amber-950/40 border border-amber-800/40 rounded-lg p-4">
+            <p id="ins-hypothesis" class="text-amber-200 text-sm"></p>
+          </div>
+        </div>
+
+        <!-- Meta -->
+        <div class="flex items-center gap-4 text-xs text-gray-600 border-t border-gray-800 pt-3">
+          <span id="ins-model"></span>
+          <span id="ins-cached"></span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ── State ───────────────────────────────────────────────────────────
+    let reviewerChart = null;
+    let lastMetrics = null;
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+    function getParams() {
+      return {
+        repo: document.getElementById('repo').value.trim() || 'pallets/flask',
+        since: document.getElementById('since').value,
+        until: document.getElementById('until').value,
+      };
+    }
+
+    function show(id) { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function setStatus(html, color = 'text-gray-400') {
+      const el = document.getElementById('sync-status');
+      el.innerHTML = html;
+      el.className = `mt-3 text-sm ${color}`;
+      el.classList.remove('hidden');
+    }
+
+    function fmtHours(h) {
+      if (h == null) return '–';
+      if (h < 1) return `${Math.round(h * 60)}m`;
+      if (h < 24) return `${h.toFixed(1)}h`;
+      return `${(h / 24).toFixed(1)}d`;
+    }
+
+    function confidenceColor(score) {
+      if (score >= 0.7) return '#22c55e';
+      if (score >= 0.4) return '#f59e0b';
+      return '#ef4444';
+    }
+
+    // ── Sync ─────────────────────────────────────────────────────────────
+    async function runSync() {
+      const { repo, since, until } = getParams();
+      if (!repo) { setStatus('Enter a repository first.', 'text-yellow-400'); return; }
+
+      document.getElementById('sync-icon').innerHTML = '<span class="spinner"></span>';
+      document.getElementById('sync-label').textContent = 'Syncing…';
+      document.getElementById('sync-btn').disabled = true;
+      setStatus('Syncing… this may take 10–30 seconds for large repos.', 'text-indigo-400');
+
+      try {
+        const res = await fetch('/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo, since, until }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setStatus(`✗ Sync failed: ${data.detail || JSON.stringify(data)}`, 'text-red-400');
+        } else if (data.status === 'success') {
+          setStatus(
+            `✓ Sync complete — <strong>${data.rows_ingested}</strong> rows ingested for <em>${repo}</em>`,
+            'text-green-400'
+          );
+          await loadMetrics();
+          await loadCycleTime();
+        } else {
+          setStatus(`✗ Sync error: ${data.error || data.status}`, 'text-red-400');
+        }
+      } catch (e) {
+        setStatus(`✗ Network error: ${e.message}`, 'text-red-400');
+      } finally {
+        document.getElementById('sync-icon').textContent = '▶';
+        document.getElementById('sync-label').textContent = 'Sync';
+        document.getElementById('sync-btn').disabled = false;
+      }
+    }
+
+    // ── Review Load ───────────────────────────────────────────────────────
+    async function loadMetrics() {
+      const { repo, since: from, until: to } = getParams();
+      hide('rl-empty'); hide('rl-content');
+      show('rl-loading');
+
+      try {
+        const res = await fetch(
+          `/metrics/review-load?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}&top=15`
+        );
+        if (!res.ok) {
+          const err = await res.json();
+          hide('rl-loading');
+          show('rl-empty');
+          document.getElementById('rl-empty').textContent =
+            err.detail || 'No data. Run sync first.';
+          return;
+        }
+        const data = await res.json();
+        lastMetrics = data;
+        renderReviewLoad(data);
+      } catch (e) {
+        hide('rl-loading');
+        show('rl-empty');
+        document.getElementById('rl-empty').textContent = `Error: ${e.message}`;
+      }
+    }
+
+    function renderReviewLoad(data) {
+      hide('rl-loading'); hide('rl-empty');
+
+      document.getElementById('stat-prs').textContent = data.totals.prs.toLocaleString();
+      document.getElementById('stat-reviews').textContent = data.totals.reviews.toLocaleString();
+      document.getElementById('stat-gini').textContent = data.gini.toFixed(3);
+
+      // Concentration badges
+      const row = document.getElementById('concentration-row');
+      row.innerHTML = `
+        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
+          Top-1: <strong>${(data.top_n_share.top1 * 100).toFixed(1)}%</strong>
+        </span>
+        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
+          Top-3: <strong>${(data.top_n_share.top3 * 100).toFixed(1)}%</strong>
+        </span>
+        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
+          Top-5: <strong>${(data.top_n_share.top5 * 100).toFixed(1)}%</strong>
+        </span>
+        <span class="px-2 py-1 rounded bg-gray-800 text-gray-300 text-xs">
+          Reviewers: <strong>${data.totals.reviewers}</strong>
+        </span>
+      `;
+
+      // Chart
+      const labels = data.reviewers.map(r => r.login);
+      const values = data.reviewers.map(r => parseFloat((r.share_of_reviews * 100).toFixed(1)));
+
+      if (reviewerChart) reviewerChart.destroy();
+      const ctx = document.getElementById('reviewerChart').getContext('2d');
+      reviewerChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Share of reviews (%)',
+            data: values,
+            backgroundColor: values.map((_, i) =>
+              i === 0 ? '#6366f1' : i < 3 ? '#8b5cf6' : '#4b5563'
+            ),
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const r = data.reviewers[ctx.dataIndex];
+                  return [
+                    ` ${ctx.parsed.x}% of reviews`,
+                    ` ${r.reviews} reviews · ${r.approvals} approvals`,
+                    r.median_hours_to_first_review != null
+                      ? ` Median TTR: ${fmtHours(r.median_hours_to_first_review)}`
+                      : '',
+                  ].filter(Boolean);
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: '#9ca3af', callback: v => v + '%' },
+              grid: { color: '#1f2937' },
+            },
+            y: { ticks: { color: '#d1d5db', font: { family: 'monospace', size: 11 } } },
+          },
+        },
+      });
+
+      show('rl-content');
+    }
+
+    // ── Cycle Time ────────────────────────────────────────────────────────
+    async function loadCycleTime() {
+      const { repo, since: from, until: to } = getParams();
+      hide('ct-empty'); hide('ct-content');
+      show('ct-loading');
+
+      try {
+        const res = await fetch(
+          `/metrics/cycle-time?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}`
+        );
+        if (!res.ok) {
+          hide('ct-loading'); show('ct-empty');
+          const err = await res.json();
+          document.getElementById('ct-empty').textContent = err.detail || 'No data.';
+          return;
+        }
+        const data = await res.json();
+        renderCycleTime(data);
+      } catch (e) {
+        hide('ct-loading'); show('ct-empty');
+        document.getElementById('ct-empty').textContent = `Error: ${e.message}`;
+      }
+    }
+
+    function renderCycleTime(data) {
+      hide('ct-loading'); hide('ct-empty');
+
+      // Overall row
+      document.getElementById('ct-overall').innerHTML = `
+        <div class="bg-gray-800 rounded-lg p-3 text-center">
+          <div class="text-xs text-gray-500 mb-1">Time to First Review</div>
+          <div class="text-sm font-bold text-white">
+            ${fmtHours(data.time_to_first_review.p50_hours)}
+            <span class="text-gray-500 font-normal text-xs">p50</span>
+          </div>
+          <div class="text-xs text-gray-600">
+            ${fmtHours(data.time_to_first_review.p90_hours)} p90
+          </div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-3 text-center">
+          <div class="text-xs text-gray-500 mb-1">Time to Merge</div>
+          <div class="text-sm font-bold text-white">
+            ${fmtHours(data.time_to_merge.p50_hours)}
+            <span class="text-gray-500 font-normal text-xs">p50</span>
+          </div>
+          <div class="text-xs text-gray-600">
+            ${fmtHours(data.time_to_merge.p90_hours)} p90
+          </div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-3 text-center">
+          <div class="text-xs text-gray-500 mb-1">Merged PRs</div>
+          <div class="text-sm font-bold text-white">${data.pr_count}</div>
+          <div class="text-xs text-gray-600">in period</div>
+        </div>
+      `;
+
+      // Per-author table
+      const tbody = document.getElementById('ct-table');
+      tbody.innerHTML = data.by_author.slice(0, 12).map(a => `
+        <tr>
+          <td class="py-1.5 pr-2 font-mono text-gray-300">${a.author}</td>
+          <td class="py-1.5 pr-2 text-right text-gray-400">${a.pr_count}</td>
+          <td class="py-1.5 pr-2 text-right text-gray-300">
+            ${fmtHours(a.time_to_first_review.p50_hours)}
+          </td>
+          <td class="py-1.5 text-right text-gray-300">
+            ${fmtHours(a.time_to_merge.p50_hours)}
+          </td>
+        </tr>
+      `).join('');
+
+      show('ct-content');
+    }
+
+    // ── Insight ───────────────────────────────────────────────────────────
+    async function loadInsight() {
+      const { repo, since: from, until: to } = getParams();
+      hide('ins-empty'); hide('ins-content');
+      show('ins-loading');
+
+      try {
+        const res = await fetch(
+          `/insights?repo=${encodeURIComponent(repo)}&from=${from}&to=${to}&metric=review-load`
+        );
+        if (!res.ok) {
+          const err = await res.json();
+          hide('ins-loading'); show('ins-empty');
+          document.getElementById('ins-empty').textContent =
+            (err.detail && typeof err.detail === 'string') ? err.detail
+            : 'Load metrics first, then generate insight.';
+          return;
+        }
+        const data = await res.json();
+        renderInsight(data);
+      } catch (e) {
+        hide('ins-loading'); show('ins-empty');
+        document.getElementById('ins-empty').textContent = `Error: ${e.message}`;
+      }
+    }
+
+    function renderInsight(data) {
+      hide('ins-loading'); hide('ins-empty');
+
+      document.getElementById('ins-narrative').textContent = data.narrative;
+
+      // Confidence
+      const pct = Math.round(data.confidence.score * 100);
+      document.getElementById('ins-conf-pct').textContent = `${pct}%`;
+      document.getElementById('ins-conf-rationale').textContent = data.confidence.rationale;
+      const bar = document.getElementById('ins-conf-bar');
+      bar.style.width = `${pct}%`;
+      bar.style.background = confidenceColor(data.confidence.score);
+
+      // Evidence
+      const evEl = document.getElementById('ins-evidence');
+      evEl.innerHTML = (data.evidence || []).map(ev => `
+        <span class="evidence-badge" title="${ev.metric}: ${ev.value} (${ev.period})">
+          <span class="text-gray-500">${ev.id}</span>
+          ${ev.metric}=<strong>${
+            typeof ev.value === 'number' && ev.value < 10
+              ? ev.value.toFixed(3)
+              : Math.round(ev.value)
+          }</strong>
+        </span>
+      `).join('');
+
+      // Hypothesis
+      const hypBlock = document.getElementById('ins-hypothesis-block');
+      if (data.hypothesis) {
+        document.getElementById('ins-hypothesis').textContent = data.hypothesis.claim;
+        hypBlock.classList.remove('hidden');
+      } else {
+        hypBlock.classList.add('hidden');
+      }
+
+      // Meta
+      document.getElementById('ins-model').textContent =
+        `Model: ${data.model?.name ?? '–'} · Prompt: ${data.model?.prompt_version ?? '–'}`;
+      document.getElementById('ins-cached').textContent =
+        data.cached ? '⚡ cached' : '';
+
+      show('ins-content');
+    }
+
+    // ── Keyboard shortcut: Enter in repo field syncs ──────────────────────
+    document.getElementById('repo').addEventListener('keydown', e => {
+      if (e.key === 'Enter') runSync();
+    });
+  </script>
+</body>
+</html>
