@@ -1,7 +1,8 @@
 # ── builder ──────────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
-WORKDIR /build
+# Use the same WORKDIR as the runtime stage so venv shebangs resolve correctly.
+WORKDIR /app
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -20,8 +21,8 @@ WORKDIR /app
 # Non-root user for security
 RUN addgroup --system app && adduser --system --ingroup app app
 
-# Copy the venv from builder
-COPY --from=builder /build/.venv /app/.venv
+# Copy the venv from builder (paths match because both stages use WORKDIR /app)
+COPY --from=builder /app/.venv /app/.venv
 
 # Copy source
 COPY app/       ./app/
