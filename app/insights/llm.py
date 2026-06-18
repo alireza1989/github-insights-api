@@ -62,11 +62,15 @@ async def call_llm(
     if retry_context:
         user_content += f"\n\n<grounding_failure>\n{retry_context}\n</grounding_failure>"
 
+    # Use tool_choice "any" instead of forcing the specific tool name: the API disallows
+    # extended thinking when tool_choice={"type":"tool"} (forced named tool), but "any"
+    # still requires the model to call a tool. Since we only register emit_insight, it
+    # will always be called — behaviour is identical but thinking is now compatible.
     call_kwargs: dict[str, Any] = {
         "model": settings.llm_model,
         "max_tokens": settings.llm_max_tokens,
         "tools": [tool],
-        "tool_choice": {"type": "tool", "name": "emit_insight"},
+        "tool_choice": {"type": "any"},
         "system": system_content,
         "messages": [{"role": "user", "content": user_content}],
     }
