@@ -1,0 +1,11 @@
+{
+  "repo": "example/sparse",
+  "period": {"from_date": "2024-01-01", "to_date": "2024-01-07"},
+  "totals": {"prs": 3, "reviews": 5, "reviewers": 2},
+  "gini": 0.30,
+  "top_n_share": {"top1": 0.60, "top3": 1.0, "top5": 1.0},
+  "reviewers": [
+    {"login": "alice", "reviews": 3, "approvals": 2, "changes_requested": 1, "comments": 0, "median_hours_to_first_review": 1.5, "share_of_reviews": 0.60},
+    {"login": "bob",   "reviews": 2, "approvals": 2, "changes_requested": 0, "comments": 0, "median_hours_to_first_review": 3.0, "share_of_reviews": 0.40}
+  ]
+}

@@ -1,0 +1,35 @@
+cases:
+  - name: heavy_concentration
+    fixture: heavy_concentration.json
+    window_days: 90
+    assertions:
+      - tool_call_succeeded
+      - evidence_ids_valid
+      - numeric_grounding
+      - confidence_gt: 0.4
+
+  - name: balanced_load
+    fixture: balanced_load.json
+    window_days: 90
+    assertions:
+      - tool_call_succeeded
+      - evidence_ids_valid
+      - numeric_grounding
+      - confidence_gt: 0.3
+
+  - name: sparse_data
+    fixture: sparse_data.json
+    window_days: 7
+    assertions:
+      - tool_call_succeeded
+      - evidence_ids_valid
+      - numeric_grounding
+      - confidence_lt: 0.5
+
+  - name: empty_data
+    fixture: empty_data.json
+    window_days: 7
+    assertions:
+      - tool_call_succeeded
+      - no_hypothesis       # insufficient data → hypothesis should be absent
+      - confidence_lt: 0.3

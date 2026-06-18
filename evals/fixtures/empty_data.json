@@ -1,0 +1,8 @@
+{
+  "repo": "example/empty",
+  "period": {"from_date": "2024-01-01", "to_date": "2024-01-07"},
+  "totals": {"prs": 0, "reviews": 0, "reviewers": 0},
+  "gini": 0.0,
+  "top_n_share": {"top1": 0.0, "top3": 0.0, "top5": 0.0},
+  "reviewers": []
+}

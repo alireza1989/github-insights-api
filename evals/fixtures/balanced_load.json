@@ -1,0 +1,12 @@
+{
+  "repo": "example/balanced",
+  "period": {"from_date": "2024-01-01", "to_date": "2024-03-31"},
+  "totals": {"prs": 60, "reviews": 240, "reviewers": 12},
+  "gini": 0.12,
+  "top_n_share": {"top1": 0.12, "top3": 0.30, "top5": 0.47},
+  "reviewers": [
+    {"login": "alice", "reviews": 29, "approvals": 20, "changes_requested": 5, "comments": 4, "median_hours_to_first_review": 4.0, "share_of_reviews": 0.12},
+    {"login": "bob",   "reviews": 25, "approvals": 18, "changes_requested": 4, "comments": 3, "median_hours_to_first_review": 6.2, "share_of_reviews": 0.104},
+    {"login": "carol", "reviews": 24, "approvals": 19, "changes_requested": 3, "comments": 2, "median_hours_to_first_review": 5.8, "share_of_reviews": 0.1}
+  ]
+}
