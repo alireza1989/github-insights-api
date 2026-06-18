@@ -34,11 +34,15 @@ def _normalize_number(token: str) -> list[str]:
     variants = [clean]
     try:
         f = float(clean)
-        # Also match percentage as decimal (31% → 0.31)
         if token.endswith("%"):
             # The LLM writes "31%" but the metrics payload stores 0.31; match both forms.
             variants.append(str(round(f / 100, 2)))
             variants.append(str(round(f / 100, 4)))
+        elif 0.0 < f < 100.0:
+            # The model sometimes writes a percentage without the % sign (e.g. "7.25"
+            # for top1_share=0.0725).  Try the /100 decimal form as well.
+            variants.append(str(round(f / 100, 4)))
+            variants.append(str(round(f / 100, 2)))
         # Round-tripped int
         if f == int(f):
             variants.append(str(int(f)))

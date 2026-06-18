@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 
 _CACHE_TTL_HOURS = 24
 _PROMPT_NAME = "insights"
-_PROMPT_VERSION = 2
+_PROMPT_VERSION = 3
 
 
 def _cache_key(repo: str, from_date: str, to_date: str, metric: str, model: str) -> str:
@@ -121,8 +121,14 @@ async def generate_insight(
         logger.error("llm call failed", error=str(exc))
         raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}") from exc
 
+    # Build a single grounding payload that includes both review-load and cycle-time
+    # so the validator can find numbers the LLM cites from either source.
+    grounding_payload = metrics_dict.copy()
+    if cycle_time:
+        grounding_payload["cycle_time"] = cycle_time.model_dump()
+
     # Grounding check
-    grounding = check_grounding(tool_output, metrics_dict)
+    grounding = check_grounding(tool_output, grounding_payload)
     logger.info(
         "grounding check",
         valid=grounding.valid,
@@ -138,7 +144,7 @@ async def generate_insight(
             tool_output, usage = await call_llm(
                 sys_prompt, user_prompt, settings, prompt_version=version_str, retry_context=failure_desc
             )
-            grounding = check_grounding(tool_output, metrics_dict)
+            grounding = check_grounding(tool_output, grounding_payload)
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"LLM retry failed: {exc}") from exc
 
