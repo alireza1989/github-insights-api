@@ -2,7 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.deps import get_app_settings, get_session
@@ -56,7 +56,7 @@ async def trigger_sync(
 
 
 async def _background_ingest(
-    session_factory: object,
+    session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
     run_id: int,
     repo: str,
@@ -64,7 +64,7 @@ async def _background_ingest(
     until: date,
 ) -> None:
     """Run the full ingest in a background task with its own DB session."""
-    async with session_factory() as session:  # type: ignore[attr-defined]
+    async with session_factory() as session:
         service = IngestService(session, settings)
         await service.execute_run(run_id, repo, since, until)
 

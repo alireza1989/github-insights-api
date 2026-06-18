@@ -10,7 +10,7 @@ from app.config import Settings
 from app.deps import get_app_settings, get_session
 from app.github.utils import normalize_repo
 from app.insights.service import generate_insight
-from app.routers.metrics import _get_repo, cycle_time, review_load
+from app.routers.metrics import cycle_time, review_load
 from app.schemas.insights import InsightResponse
 
 router = APIRouter(tags=["insights"])

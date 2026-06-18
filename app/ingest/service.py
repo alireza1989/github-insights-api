@@ -44,7 +44,9 @@ class IngestService:
         result = await self._session.execute(
             select(Repository).where(Repository.owner == owner, Repository.name == name)
         )
-        repo_row = result.scalar_one()
+        repo_row = result.scalar_one_or_none()
+        if repo_row is None:
+            raise RuntimeError(f"Repository '{repo}' not found; was start_run() called first?")
 
         try:
             rows = await self._run_ingest(owner, name, repo_row, since_dt, until_dt)

@@ -39,6 +39,7 @@ def compute_review_load(
             totals=Totals(prs=total_prs, reviews=0, reviewers=0),
             gini=0.0,
             top_n_share=TopNShare(top1=0.0, top3=0.0, top5=0.0),
+            avg_reviews_per_reviewer=0.0,
             reviewers=[],
         )
 
@@ -49,6 +50,7 @@ def compute_review_load(
 
     total_reviewers = len(reviewer_reviews)
     counts = Counter({r: len(rvs) for r, rvs in reviewer_reviews.items()})
+    avg_reviews = total_reviews / total_reviewers
 
     # Gini over review counts
     gini = compute_gini(list(counts.values()))
@@ -86,6 +88,7 @@ def compute_review_load(
             comments=sum(1 for rv in reviewer_reviews[login] if rv.state == "COMMENTED"),
             median_hours_to_first_review=median_hours_to_first_review_for(login),
             share_of_reviews=round(count / total_reviews, 4),
+            relative_load=round(count / avg_reviews, 2),
         )
         for login, count in top_reviewers
     ]
@@ -101,5 +104,6 @@ def compute_review_load(
         totals=Totals(prs=total_prs, reviews=total_reviews, reviewers=total_reviewers),
         gini=round(gini, 4),
         top_n_share=TopNShare(top1=round(top1, 4), top3=round(top3, 4), top5=round(top5, 4)),
+        avg_reviews_per_reviewer=round(avg_reviews, 2),
         reviewers=reviewer_details,
     )

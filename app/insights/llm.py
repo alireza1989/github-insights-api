@@ -22,9 +22,6 @@ from app.schemas.insights import InsightToolInput
 
 logger = get_logger(__name__)
 
-_PROMPT_VERSION = "insights_v1"
-
-
 def _build_tool(schema: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": "emit_insight",
@@ -40,6 +37,7 @@ async def call_llm(
     system_prompt: str,
     user_prompt: str,
     settings: Settings,
+    prompt_version: str = "unknown",
     retry_context: str | None = None,
 ) -> tuple[InsightToolInput, dict[str, Any]]:
     """
@@ -105,7 +103,7 @@ async def call_llm(
             logger.info(
                 "llm call complete",
                 model=settings.llm_model,
-                prompt_version=_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 retry=retry_context is not None,
                 **usage_dict,
             )

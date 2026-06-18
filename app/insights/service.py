@@ -113,9 +113,10 @@ async def generate_insight(
         confidence_rationale=conf_rationale,
     )
 
+    version_str = f"insights_v{_PROMPT_VERSION}"
     # First LLM attempt
     try:
-        tool_output, usage = await call_llm(sys_prompt, user_prompt, settings)
+        tool_output, usage = await call_llm(sys_prompt, user_prompt, settings, prompt_version=version_str)
     except Exception as exc:
         logger.error("llm call failed", error=str(exc))
         raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}") from exc
@@ -135,7 +136,7 @@ async def generate_insight(
         logger.warning("grounding failed, retrying", failures=failure_desc)
         try:
             tool_output, usage = await call_llm(
-                sys_prompt, user_prompt, settings, retry_context=failure_desc
+                sys_prompt, user_prompt, settings, prompt_version=version_str, retry_context=failure_desc
             )
             grounding = check_grounding(tool_output, metrics_dict)
         except Exception as exc:

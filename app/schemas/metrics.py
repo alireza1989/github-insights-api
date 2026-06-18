@@ -16,6 +16,7 @@ class ReviewerDetail(BaseModel):
     comments: int
     median_hours_to_first_review: Optional[float]
     share_of_reviews: float
+    relative_load: float  # reviewer.reviews / avg_reviews_per_reviewer; >1 means above-average
 
 
 class Totals(BaseModel):
@@ -36,6 +37,7 @@ class ReviewLoadResponse(BaseModel):
     totals: Totals
     gini: float
     top_n_share: TopNShare
+    avg_reviews_per_reviewer: float  # pre-computed so the LLM can cite it without arithmetic
     reviewers: list[ReviewerDetail]
 
 

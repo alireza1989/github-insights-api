@@ -16,7 +16,7 @@ from app.schemas.metrics import CycleTimeResponse, ReviewLoadResponse
 router = APIRouter(tags=["metrics"])
 
 
-async def _get_repo(session: AsyncSession, repo: str) -> Repository:
+async def get_repo_or_404(session: AsyncSession, repo: str) -> Repository:
     owner, name = repo.split("/", 1)
     result = await session.execute(
         select(Repository).where(Repository.owner == owner, Repository.name == name)
@@ -40,7 +40,7 @@ async def review_load(
 ) -> ReviewLoadResponse:
     """Reviewer-load distribution with Gini coefficient and per-reviewer breakdown."""
     repo = normalize_repo(repo)
-    repo_row = await _get_repo(session, repo)
+    repo_row = await get_repo_or_404(session, repo)
 
     from_dt = date(from_date.year, from_date.month, from_date.day)
     to_dt = date(to_date.year, to_date.month, to_date.day)
@@ -78,7 +78,7 @@ async def cycle_time(
 ) -> CycleTimeResponse:
     """PR cycle-time: p50/p90 for time-to-first-review, approval, and merge."""
     repo = normalize_repo(repo)
-    repo_row = await _get_repo(session, repo)
+    repo_row = await get_repo_or_404(session, repo)
 
     prs_result = await session.execute(
         select(PullRequest).where(
