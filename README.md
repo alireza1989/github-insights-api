@@ -5,80 +5,119 @@ A FastAPI service that ingests GitHub collaboration data, computes reviewer-load
 ## Features
 
 - **GitHub ingestion** — pulls PRs, reviews, and commits via GraphQL (paginated, idempotent, re-runnable)
-- **Reviewer-load metric** — Gini coefficient, top-N concentration, per-reviewer breakdown
+- **Historical data caching** — synced date ranges are stored per repo; re-running or extending a window only fetches the missing gap from GitHub
+- **Reviewer-load metric** — Gini coefficient, top-N concentration, per-reviewer breakdown with relative load
 - **Cycle-time metric** — p50/p90 time-to-first-review, time-to-approval, time-to-merge
-- **LLM insights** — Claude-powered narrative with evidence chain, computed confidence score, grounding validation, and retry on hallucination
-- **Web UI** — single-page dashboard at `/` with charts and insight display
+- **LLM insights** — Claude-powered narrative with evidence chain, computed confidence score, grounding validation, and automatic retry on hallucination
+- **GitHub rate-limit aware** — proactively throttles when the hourly quota runs low; retries on 429/403 and transient 5xx/connection drops
+- **Web UI** — single-page dashboard at `/` with charts and insight panel
 - **OpenAPI docs** — interactive API explorer at `/docs`
 
+---
+
 ## Quickstart
+
+### Prerequisites
+
+| Credential | Where to get it | Scopes needed |
+|---|---|---|
+| **GitHub PAT** | [github.com/settings/tokens](https://github.com/settings/tokens) → *Generate new token (classic)* | **None** — a token with no scopes is sufficient for public repos |
+| **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com) | — |
 
 ### Option A — Docker Compose (recommended)
 
 ```bash
+git clone https://github.com/alireza1989/github-insights-api.git
+cd github-insights-api
+
 cp .env.example .env
-# edit .env and add GITHUB_TOKEN and ANTHROPIC_API_KEY
+# Open .env and fill in GITHUB_TOKEN and ANTHROPIC_API_KEY
 
 docker compose up --build
 ```
 
-The API is available at `http://localhost:8000`.
+The service is available at `http://localhost:8000`. The first build takes ~60 s; subsequent starts are instant.
 
 ### Option B — Local with uv
 
 ```bash
 # requires Python 3.12+ and uv (https://docs.astral.sh/uv)
-cp .env.example .env
-# edit .env
+cp .env.example .env   # then edit
 
 uv sync
 uv run uvicorn app.main:app --reload
 ```
 
-### Web UI (easiest)
+---
 
-Open `http://localhost:8000`, paste any public GitHub URL (e.g. `https://github.com/pallets/flask`),
-pick a date range, and click **Analyze**. The dashboard syncs data, computes metrics, and generates
-an AI insight automatically.
+## Testing the service
 
-### API / curl
+### 1 — Web UI (recommended for a first look)
 
-The `repo` parameter accepts a full GitHub URL **or** `owner/name` format interchangeably.
+1. Open `http://localhost:8000`
+2. Paste any public GitHub URL, e.g. `https://github.com/tiangolo/fastapi`
+3. Set a date range — start with **3 months** to keep the sync fast
+4. Click **Analyze**
+
+The pipeline runs three steps automatically: *Sync → Compute metrics → Generate insight*. The first sync for a repo takes a few seconds (or longer for very large repos like kubernetes/kubernetes). Re-running the same range is instant — only new date gaps hit GitHub.
+
+> **Suggested repos for testing** (small to medium, active review culture):
+> - `tiangolo/fastapi` — fast sync, rich review data
+> - `pallets/flask` — classic project, clean history
+> - `psf/requests` — small and well-reviewed
+
+### 2 — API / curl
+
+The `repo` parameter accepts a full GitHub URL **or** `owner/name` interchangeably.
 
 ```bash
-# 1. Sync a repository (fetches PRs, reviews, commits)
-curl -X POST http://localhost:8000/sync \
+# Step 1 — Sync (returns 202 immediately; poll step 2 for status)
+curl -s -X POST http://localhost:8000/sync \
   -H 'Content-Type: application/json' \
-  -d '{"repo":"https://github.com/pallets/flask","since":"2024-01-01","until":"2024-06-30"}'
+  -d '{"repo":"tiangolo/fastapi","since":"2025-01-01","until":"2025-03-31"}' | jq
 
-# 2. Reviewer-load metrics
-curl 'http://localhost:8000/metrics/review-load?repo=https://github.com/pallets/flask&from=2024-01-01&to=2024-06-30'
+# Step 2 — Poll sync status (replace 1 with the id returned above)
+curl -s http://localhost:8000/sync/1 | jq
 
-# 3. Cycle-time metrics
-curl 'http://localhost:8000/metrics/cycle-time?repo=pallets/flask&from=2024-01-01&to=2024-06-30'
+# Step 3 — Reviewer-load metrics
+curl -s 'http://localhost:8000/metrics/review-load?repo=tiangolo/fastapi&from=2025-01-01&to=2025-03-31' | jq
 
-# 4. LLM-powered insight
-curl 'http://localhost:8000/insights?repo=pallets/flask&from=2024-01-01&to=2024-06-30'
+# Step 4 — Cycle-time metrics
+curl -s 'http://localhost:8000/metrics/cycle-time?repo=tiangolo/fastapi&from=2025-01-01&to=2025-03-31' | jq
+
+# Step 5 — LLM narrative insight (may take ~20 s on first call; cached for 24 h after)
+curl -s 'http://localhost:8000/insights?repo=tiangolo/fastapi&from=2025-01-01&to=2025-03-31' | jq
 ```
 
-Open `http://localhost:8000/docs` for the interactive OpenAPI explorer.
+### 3 — Interactive API explorer
+
+Open `http://localhost:8000/docs` — every endpoint is documented with live try-it-out.
+
+### Running tests
+
+```bash
+uv run pytest          # 50 unit + integration tests, no API keys needed
+```
+
+---
 
 ## Environment variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_TOKEN` | ✅ | — | Any valid GitHub PAT (no extra scopes needed for public repos) |
+| `GITHUB_TOKEN` | ✅ | — | GitHub PAT — no extra scopes needed for public repos |
 | `ANTHROPIC_API_KEY` | ✅ | — | Anthropic API key |
 | `LLM_MODEL` | | `claude-sonnet-4-6` | Claude model ID |
 | `LLM_MAX_TOKENS` | | `8000` | Max output tokens per insight call |
-| `LLM_THINKING_BUDGET` | | `4000` | Extended thinking budget tokens |
-| `LLM_ENABLE_THINKING` | | `true` | Enable extended thinking |
+| `LLM_ENABLE_THINKING` | | `true` | Enable adaptive extended thinking |
 | `DATABASE_URL` | | `sqlite+aiosqlite:///./insights.db` | Async SQLite URL |
-| `RATE_LIMIT_PER_MINUTE` | | `10` | Rate limit on `/insights` per IP |
+| `RATE_LIMIT_PER_MINUTE` | | `10` | Per-IP rate limit on `/insights` |
 | `LOG_LEVEL` | | `INFO` | Log level |
-| `LOG_JSON` | | `false` | Emit JSON logs (set `true` in production) |
+| `LOG_JSON` | | `false` | Emit JSON logs (`true` in production / Docker) |
 
-GitHub's GraphQL API requires authentication even for public repositories — a token with **no extra scopes** is sufficient for read-only access to public repos. The token is never logged.
+GitHub's GraphQL API requires authentication even for public repositories. A token with **no scopes** is sufficient — it is never logged.
+
+---
 
 ## API reference
 
@@ -86,66 +125,49 @@ GitHub's GraphQL API requires authentication even for public repositories — a 
 |---|---|---|
 | `GET` | `/` | Web UI dashboard |
 | `GET` | `/health` | Health check |
-| `POST` | `/sync` | Ingest a repository for a date range |
-| `GET` | `/metrics/review-load` | Reviewer-load distribution + Gini |
+| `POST` | `/sync` | Ingest a repository for a date range (async, returns 202) |
+| `GET` | `/sync/{id}` | Poll ingest job status |
+| `GET` | `/metrics/review-load` | Reviewer-load distribution + Gini coefficient |
 | `GET` | `/metrics/cycle-time` | PR cycle-time p50/p90 |
 | `GET` | `/insights` | LLM narrative insight |
-| `GET` | `/docs` | Interactive OpenAPI docs |
+| `GET` | `/docs` | Interactive OpenAPI explorer |
 
 Full parameter docs at `/docs`.
 
-## CLI
-
-```bash
-# Sync without starting the server
-uv run python -m app.cli sync --repo pallets/flask --since 2024-01-01 --until 2024-06-30
-```
-
-## Running tests
-
-```bash
-uv run pytest
-```
-
-## Running evals
-
-Evals exercise the real LLM against hand-crafted metric fixtures. They require `ANTHROPIC_API_KEY`.
-
-```bash
-uv run python -m evals.run
-# or via pytest:
-uv run pytest evals/
-```
+---
 
 ## Architecture
 
 ```
-GitHub API
-    │
-    ▼
-app/ingest/        ← fetch → normalize → upsert (idempotent)
-    │
-    ▼
-SQLite (SQLModel)  ← pull_request, review, commit, sync_run, insight_cache
-    │
-    ├──▶ app/metrics/    ← pure functions over DB rows (review_load, cycle_time)
-    │         │
-    │         ▼
-    └──▶ app/insights/   ← confidence scoring → LLM call → grounding validation
-              │
-              ▼
-         REST API (FastAPI) + Web UI
+GitHub GraphQL API
+        │
+        ▼
+app/ingest/          ← fetch gaps only (SyncedRange coverage table)
+        │              paginated, idempotent ON CONFLICT DO UPDATE
+        ▼
+SQLite (SQLModel)    ← pull_request, review, commit, sync_run,
+        │              synced_range, insight_cache
+        ├──▶ app/metrics/    ← pure functions: review_load, cycle_time
+        │         │            pre-computes avg_reviews, relative_load
+        │         ▼
+        └──▶ app/insights/   ← confidence scoring (deterministic)
+                  │              → LLM call (Claude, adaptive thinking)
+                  │              → grounding validation + retry
+                  ▼
+         REST API (FastAPI) + Web UI (Tailwind + Chart.js)
 ```
 
 **Key design decisions:**
 
-- **Structured LLM output via tool use** — the insight schema is registered as a Claude tool and `tool_choice` is forced, so output is always valid JSON matching the Pydantic model. No markdown-fence stripping, no JSON-repair.
-- **Computed confidence, not LLM-generated** — a deterministic formula (sample size, effect size, window length) produces the confidence score. The LLM uses it to calibrate language but cannot override it.
-- **Grounding validation** — after every LLM call, numeric tokens in the narrative are cross-checked against the metrics payload. If grounding fails, the call is retried once with the failure surfaced in the prompt.
-- **Extended thinking + prompt caching** — extended thinking is enabled for analytical depth; the system prompt is prompt-cached to reduce cost on repeated calls.
-- **Idempotent ingest** — composite unique constraints + `ON CONFLICT DO UPDATE` make re-running `/sync` for the same window safe.
-- **Insights cached 24 h** — responses are keyed by `(repo, from, to, metric, model, prompt_version)` in SQLite.
-- **SQLite over Postgres** — zero-ops, ships in Docker, sufficient for this scale. Alembic + Postgres would be the next step.
+- **Historical data caching** — a `synced_range` table records every successfully fetched `(repo, from_date, to_date)` window. On subsequent syncs only the uncovered gaps are fetched from GitHub, making re-runs and range extensions cheap.
+- **Structured LLM output via tool use** — the insight schema is registered as a Claude tool; when thinking is disabled `tool_choice` is `"any"` (guaranteed call), when thinking is enabled it switches to `"auto"` (required by the API — forced tool use and thinking are mutually exclusive).
+- **Adaptive extended thinking** — uses `{"type": "adaptive"}` (Claude 4.x format) for analytical depth; the legacy `{"type": "enabled", "budget_tokens": N}` format only works on Claude 3.7 Sonnet.
+- **Computed confidence, not LLM-generated** — a deterministic formula (sample size 35 %, effect size 30 %, window length 20 %, data freshness 15 %) produces the confidence score. The LLM uses it to calibrate language but cannot override it.
+- **Grounding validation** — after every LLM call, numeric tokens in the narrative are cross-checked against the full metrics payload (review-load + cycle-time). Numbers not found in the data trigger a retry with the failures surfaced in the prompt.
+- **GitHub rate-limit respect** — proactively sleeps when `rateLimit.remaining < 500`; respects `Retry-After` on 429 (primary) and 403 (secondary) responses; retries up to 2× on connection drops and transient 5xx.
+- **Prompt caching** — the static system prompt block carries `cache_control: ephemeral`; repeated calls for the same repo read from Anthropic's prompt cache, reducing cost significantly.
+- **Insights cached 24 h** — responses are keyed by `(repo, from, to, metric, model, prompt_version)` in SQLite; bumping the prompt version auto-invalidates stale cached insights.
+- **SQLite over Postgres** — zero-ops, ships in Docker, sufficient for this scale. Alembic + Postgres is the natural next step.
 
 ## Note on AI assistance
 
