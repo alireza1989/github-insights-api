@@ -1,5 +1,7 @@
 # GitHub Insights API
 
+> **Development note:** This project was developed using [Claude Code](https://claude.ai/code) under human supervision and planning. All architectural decisions, feature scope, and code reviews were directed by the author; Claude Code was used as the implementation assistant throughout.
+
 A FastAPI service that ingests GitHub collaboration data, computes reviewer-load and cycle-time metrics, and generates LLM-powered narrative insights with structured, evidence-grounded output.
 
 ## Features
